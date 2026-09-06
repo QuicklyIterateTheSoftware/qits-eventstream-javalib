@@ -61,7 +61,7 @@
              <repositories> block below exists — the one dependency here that is neither on Maven
              Central nor part of the Quarkus platform. A clone still tests green with that
              repository reachable, or offline once the jar is in ~/.m2. -->
-        <qits.db-core.version>2026.904.82648</qits.db-core.version>
+        <qits.db-core.version>2026.905.91442</qits.db-core.version>
         <qits.maven.repository.url>http://registry.dev.localhost:8080/artifacts/maven/maven</qits.maven.repository.url>
 
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
