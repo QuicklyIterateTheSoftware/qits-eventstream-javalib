@@ -197,8 +197,34 @@
             <artifactId>jakarta.ws.rs-api</artifactId>
         </dependency>
         <dependency>
+            <!-- The MicroProfile Health API and nothing more, for CatchupHealthCheck — the exact
+                 arrangement jakarta.ws.rs-api has above, for the exact same reason. The API jar is
+                 what lets the check compile here and stay INERT in a consumer without the
+                 extension: with nothing looking for @Readiness beans, ArC removes an unused bean
+                 and the class costs that consumer nothing but a jar on the classpath. A consumer
+                 that does carry quarkus-smallrye-health discovers it through this jar's jandex
+                 index and gets the check for free.
+
+                 quarkus-smallrye-health itself must NOT sit here at compile scope: an extension
+                 would bolt a /q/health endpoint and its whole HTTP wiring onto every consumer,
+                 including the daemons that deliberately serve nothing. -->
+            <groupId>org.eclipse.microprofile.health</groupId>
+            <artifactId>microprofile-health-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- The extension, test scope only: a check that compiles is not a check that is
+                 FOUND, and the only thing that proves discovery from this jar's jandex index is a
+                 real GET of /q/health/ready with `eventstream-catchup` in the body. Same shape as
+                 quarkus-rest below — API compile, extension test — because the failure being
+                 guarded against is the same one: a bean nobody looks for is a bean that says
+                 nothing about not having been looked for. -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

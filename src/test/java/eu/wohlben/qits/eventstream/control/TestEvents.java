@@ -8,12 +8,15 @@ import eu.wohlben.qits.eventstream.QitsEventListener;
 import eu.wohlben.qits.eventstream.QitsRawEventListener;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
@@ -418,6 +421,10 @@ public final class TestEvents {
     private final AtomicReference<String> failOnId = new AtomicReference<>();
     private final AtomicBoolean failWhenAsked = new AtomicBoolean();
     private final AtomicBoolean fromEpoch = new AtomicBoolean();
+    private final AtomicReference<String> holdOnId = new AtomicReference<>();
+    private final AtomicReference<CountDownLatch> release = new AtomicReference<>();
+    private final AtomicReference<CountDownLatch> reached = new AtomicReference<>();
+    private final AtomicReference<Thread> holder = new AtomicReference<>();
 
     @Override
     public String consumerId() {
@@ -443,6 +450,26 @@ public final class TestEvents {
       // interface's javadoc: causation is identical on both channels.
       causes.add(Optional.ofNullable(CausationScope.current()));
       frames.add(frame);
+      // Both latches are read into locals before either is used: reset() clears the hold from
+      // another thread, and a handler that read them one at a time could find the second one gone.
+      CountDownLatch arrived = reached.get();
+      CountDownLatch gate = release.get();
+      if (frame.id().equals(holdOnId.get()) && arrived != null && gate != null) {
+        holder.set(Thread.currentThread());
+        arrived.countDown();
+        try {
+          gate.await();
+        } catch (InterruptedException interrupted) {
+          // THE STAND-IN FOR THE WEDGED SOCKET READ, and it is faithful in the one way that
+          // matters: await() is an interruptible park, exactly as a virtual thread's blocking
+          // socket read measurably is. Restore the flag — the sweep above reads it to tell "the
+          // watchdog killed me" from "a handler threw" — and throw, so the funnel rolls the claim
+          // back and the event stays owed, which is what the real failure does too.
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException(
+              "a durable handler interrupted while held on " + frame.id());
+        }
+      }
       if (frame.id().equals(failOnId.get())) {
         throw new IllegalStateException("a durable handler that fails on " + frame.id());
       }
@@ -478,6 +505,40 @@ public final class TestEvents {
       failWhenAsked.set(true);
     }
 
+    /**
+     * Hold the handler on this event id until the returned latch is counted down — <b>the sweep
+     * that never comes back</b>, which is the shape of the 2026-09-08 wedge.
+     *
+     * @return the RELEASE latch: count it down to let the handler finish normally
+     */
+    public CountDownLatch holdOn(String eventId) {
+      CountDownLatch releaseLatch = new CountDownLatch(1);
+      reached.set(new CountDownLatch(1));
+      release.set(releaseLatch);
+      holder.set(null);
+      holdOnId.set(eventId);
+      return releaseLatch;
+    }
+
+    /** Block until the handler has actually reached the hold, so a test never races its own gate. */
+    public boolean awaitHold(Duration timeout) {
+      CountDownLatch gate = reached.get();
+      if (gate == null) {
+        return false;
+      }
+      try {
+        return gate.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        return false;
+      }
+    }
+
+    /** The thread that reached the hold, which is the one the watchdog is supposed to interrupt. */
+    public Thread holder() {
+      return holder.get();
+    }
+
     /** Start at the beginning of the log instead of at its head. */
     public void replaysFromEpoch() {
       fromEpoch.set(true);
@@ -506,6 +567,16 @@ public final class TestEvents {
       failOnId.set(null);
       failWhenAsked.set(false);
       fromEpoch.set(false);
+      // Free anything still held before forgetting the latch: a reset that dropped the reference
+      // would leave a sweep thread parked for the rest of the suite, which is the very failure this
+      // fixture exists to reproduce and the last one a test fixture should cause.
+      holdOnId.set(null);
+      CountDownLatch pending = release.getAndSet(null);
+      if (pending != null) {
+        pending.countDown();
+      }
+      reached.set(null);
+      holder.set(null);
     }
   }
 

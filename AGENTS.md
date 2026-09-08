@@ -46,9 +46,12 @@ produces one jar. The pom is the parent and the module at once.
   `CausationScope`'s package-private `swap`; a consumer never names either.
 - `control/` — `CanonicalJson`, `EventsPublisher`, `EventsQuery`, `Outbox`, `OutboxSweeper`,
   `RetrySchedule`, `EventDispatcher`, `EventStreamSubscriber`, `DurableFunnel`, `CatchupSweeper`,
-  `EventstreamClock`, and the three wire records `EventEnvelope`, `EventFrame` and `EventPage`.
+  `SweepCensus`, `CatchupHealthCheck`, `EventstreamClock`, and the three wire records
+  `EventEnvelope`, `EventFrame` and `EventPage`.
   `EventFrame` is public because a listener receives it; `EventPage` is not, because nobody outside
-  the catch-up loop holds one.
+  the catch-up loop holds one. `SweepCensus` is public because a consumer may want the same facts
+  its own readiness check reads; `CatchupHealthCheck` is public only because a `@Readiness` bean has
+  to be.
 - `entity/`, `persistence/` — the outbox row and the consumer watermark with their Panache
   repositories, in this jar's own named persistence unit, plus `ConsumedEvents`, which is native SQL
   over a table with no entity (its javadoc says why).
@@ -218,6 +221,39 @@ review. Its javadoc argues the widening.
   the cut is derived from the watermark's `occurred_at` (the publisher's). A day of horizon is what
   makes that safe; shortening it to minutes would make host clock skew load-bearing.
 
+  **A STALLED SWEEP CANNOT STALL FOREVER, and `synchronized` is what made it able to.** Measured,
+  2026-09-08: qits-deployments self-deployed at 00:10:33; its `eventstream-catchup-startup` VIRTUAL
+  thread went `catchUp()` → `read(consumerId)` → `ConsumerWatermarkRepository.findById` → Agroal
+  `borrowValidation` → `PgConnection.isValid` and parked in a PostgreSQL socket read that never
+  returned — a half-open TCP connection from the blue-green cutover overlap, no JDBC socket timeout.
+  Narayana's reaper aborted the transaction at 00:11:45 (ARJUNA012117/012095/012381) and the thread
+  did not move, because **a reaper abort does not unpark a socket read**. `catchUp()` was
+  `synchronized` and the `@Scheduled` tick runs `ConcurrentExecution.SKIP`, so one parked thread held
+  the monitor until 06:30: zero events consumed for six hours, every release of that window silently
+  undeployed, every health check green. Green-while-dead, healed only by a restart.
+
+  So: a `ReentrantLock`, and **a tick that finds it held runs the watchdog over the holder before it
+  decides to skip** — the tick is the watchdog's heartbeat, and a heartbeat that goes straight to
+  "skip" is what let this run. Past `qits.eventstream.sweep-stall-budget` the holder is named in an
+  ERROR and interrupted, once per budget (a compare-and-set on the strike stamp is what bounds both
+  the log volume and the re-interrupt cadence). **The interrupt measurement is the whole reason this
+  is the shape it is**, Temurin 25.0.4.1, a thread parked in a blocking `java.net.Socket` read:
+  a **virtual** thread is freed by `Thread.interrupt()` — unblocked in 1ms with
+  `java.net.SocketException: Closed by interrupt`, interrupt status still set — and a **platform**
+  thread is not, still blocked after 5s, because blocking-mode `SocketInputStream` reads are not
+  interruptible off a virtual thread. The incident's thread was virtual, so the interrupt cures it;
+  the `@Scheduled` tick is a platform thread, so a tick that wedges the same way is *not* freed and
+  the ERROR plus `CatchupHealthCheck` going DOWN is the entire signal — the one that was missing.
+  The complementary real cure is a JDBC `socketTimeout` on the datasource and is deliberately not in
+  this jar.
+
+  A long sweep is not a stalled one and must never be killed for being slow: a consumer draining a
+  day of backlog is alive by definition, and only the budget being spent is the incident's shape.
+  Equally, a listener that FAILED on a poison event does not stop a sweep counting as completed —
+  that is the no-dead-letter design below, and it must not put a consumer DOWN. Only "the loop did
+  not finish" does. `release()` clears the interrupt with `Thread.interrupted()` on purpose: the
+  scheduler's thread is pooled and must not carry our interrupt into the next task.
+
 ## The store, and the lineage that restarted at V1
 
 **The outbox runs on PostgreSQL, reached through the platform's generic resource contract.** The
@@ -334,7 +370,9 @@ both repos on a rename.
 
 ## The suite
 
-121 tests, all surefire, about fifteen seconds — the extra few are one embedded postgres starting.
+128 tests, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+`CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
+against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a
 module so a consumer's suite spawning its own postgres on the same host cannot mean the same one.
 `clean-at-start` wipes the schema between Quarkus restarts, which is what keeps a suite sharing one

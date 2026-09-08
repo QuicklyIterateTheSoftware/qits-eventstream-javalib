@@ -157,6 +157,42 @@ Four things follow, and each of them has bitten somebody:
   the library does not reorder. A handler whose effect is last-writer-wins must check the tip before
   acting — deploy only if this build is still the newest green one for its repository and branch.
 
+#### The stall watchdog, and saying so out loud
+
+**A sweep that stops coming back used to stop the module forever.** On 2026-09-08 a self-deploying
+service left its `eventstream-catchup-startup` thread parked in a PostgreSQL socket read — a
+half-open connection from the blue-green cutover overlap, with no JDBC socket timeout to end it.
+`catchUp()` was `synchronized` and the scheduled tick runs `SKIP`, so that one thread held the
+monitor for six hours: nothing was consumed, every release of the window silently failed to deploy,
+and every health check stayed green. Only a restart healed it.
+
+The sweeps are still serialized — two of them paging one watermark was never wanted — but on a lock
+rather than a monitor, and **a tick that finds the lock held looks at the holder instead of queueing
+behind it**. Past `qits.eventstream.sweep-stall-budget` it logs an ERROR naming the sweep, its
+thread and how long it has held, then interrupts that thread. On a *virtual* thread that is a real
+cure: measured on Temurin 25.0.4.1, a blocking socket read unblocks in 1ms with
+`java.net.SocketException: Closed by interrupt`. On a *platform* thread it is not, which is why the
+ERROR and the check below are the other half rather than a nicety. Nothing is left half-done by a
+kill: the watermark only ever moves on a whole page, so the interrupted sweep's events are simply
+still owed and the next sweep offers them again.
+
+**`eventstream-catchup` is a `@Readiness` check this jar ships**, and DOWN means one of two things:
+a sweep has held the lock past its budget, or no sweep has completed within the staleness horizon
+(three catch-up intervals, never less than the stall budget). A sweep merely *running* is UP — a
+consumer draining a day of backlog is alive by definition — and so is an application with the module
+dark or with no durable listener at all, because a library must never make a consumer red over a
+feature it does not use. With nothing completed yet the horizon runs from process start, which is
+the boot grace: a service starting into a real backlog is UP until it has had a whole horizon to
+finish its first sweep.
+
+A consumer with `quarkus-smallrye-health` gets the check for free — no registration, it is discovered
+from this jar's index — and a consumer without it gets an inert bean ArC removes. It is `@Readiness`
+and deliberately not `@Liveness`: readiness takes the instance out of rotation, which is the honest
+statement ("this process is not consuming"), while liveness asks for a restart, and a library that
+shipped one would be a library that can restart its consumers' processes. The in-process cure is the
+interrupt; a consumer that wants a restart on top of it wires this fact into its own liveness check.
+The complementary real fix — a JDBC `socketTimeout` on the datasource — is not in this jar.
+
 #### Rebuilding a projection at startup
 
 An ordinary durable consumer retains its watermark and handled-event claims across restarts. That is
@@ -289,9 +325,10 @@ application (250) and the environment (300) override any of it. A library jar's 
 | `qits.eventstream.redial-max-backoff` | `PT30S` | the cap. |
 | `qits.eventstream.catchup-interval` | `PT30S` | how often each durable consumer's watermark is paged forward. The worst-case lateness of an event the **stream** did not deliver. |
 | `qits.eventstream.catchup-at-startup` | `true` | also sweep once at boot — the cutover cure. On its own thread, so it never delays a start. A test suite turns it off. |
+| `qits.eventstream.sweep-stall-budget` | `PT5M` | how long one sweep may hold the catch-up lock before the watchdog names it in an ERROR, interrupts its thread and puts the `eventstream-catchup` readiness check DOWN. Generous on purpose: a long sweep draining a real backlog is normal, and only "no honest sweep runs this long" is the fault. |
 | `qits.eventstream.prune-horizon` | `P1D` | how far below the watermark a handled-event claim is kept. Pure overlap; generous because the comparison mixes two clocks. |
 
-The last three do nothing at all in an application with no durable listener.
+The last four do nothing at all in an application with no durable listener.
 
 The default `qits.events.url` is the qits-net alias, which is right for any deployment on that
 network and wrong for a host-run process — a stack that publishes qits-events on a mapped localhost
@@ -423,7 +460,7 @@ prior `mvn install` anywhere. That is the gate, and it is the reason this pom du
 instead of inheriting them. The suite starts its own stub qits-events on a Vert.x server and runs
 the two stores on a **real postgres it spawns itself** — zonky's binaries, resolved as ordinary Maven
 artifacts and started as a child process, never a container — so nothing is skipped for want of
-infrastructure. 115 tests, about fifteen seconds.
+infrastructure. 128 tests, about twenty seconds.
 
 `.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, but
 **the consumer owns the reflection registration** — read AGENTS.md's section on it before shipping a
