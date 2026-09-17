@@ -1,0 +1,3 @@
+archetype: maven-library
+artifacts:
+  - { type: maven, name: "eu.wohlben.qits:qits-eventstream", sbom: target/sbom.json }
