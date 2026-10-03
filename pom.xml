@@ -62,7 +62,7 @@
              Central nor part of the Quarkus platform. A clone still tests green with that
              repository reachable, or offline once the jar is in ~/.m2. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
-        <qits.maven.repository.url>http://registry.dev.localhost:8080/artifacts/maven/maven</qits.maven.repository.url>
+        <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
 
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>

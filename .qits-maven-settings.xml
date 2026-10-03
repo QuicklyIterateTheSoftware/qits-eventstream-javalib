@@ -3,12 +3,14 @@
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
   <mirrors>
-    <!-- Exact repository-id matches win over Maven's external:http:* blocker. This permits only
-         the platform's own repository URL supplied to the image build, not arbitrary HTTP repos.
+    <!-- The platform's hosted Maven, https://registry.qits.$QITS_DOMAIN/artifacts/maven/maven.
+         Maven cannot compute a string, so the URL arrives derived: the CI recipe
+         (release-archetypes/maven-library.yml) builds it from QITS_DOMAIN. Mirrors exactly the
+         pom's `qits-maven` id.
 
-         Read only by docker/Dockerfile's builder stage (`-s .qits-maven-settings.xml`); a
-         developer's build needs none of it, because the pom's default address is on localhost and
-         the blocker exempts localhost. Same file, same reason, as qits-workspaces'. -->
+         Read only by the release-request and release steps (`-s .qits-maven-settings.xml`); a
+         plain developer build resolves straight off the pom's own public default and needs none of
+         this. Same file, same reason, as qits-workspaces'. -->
     <mirror>
       <id>qits-maven-network</id>
       <mirrorOf>qits-maven</mirrorOf>
