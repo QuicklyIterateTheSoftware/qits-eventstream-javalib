@@ -52,6 +52,9 @@ produces one jar. The pom is the parent and the module at once.
   the catch-up loop holds one. `SweepCensus` is public because a consumer may want the same facts
   its own readiness check reads; `CatchupHealthCheck` is public only because a `@Readiness` bean has
   to be.
+- `selection/` — `EventSelection`, `EventSelectionEvaluator`, `EventSelectionGrammar`,
+  `EventSelectionException`: the payload matcher declared waits use (README, "Selecting events by
+  their payload"). Pure Java and Jackson; no bean, no Quarkus annotation, so a CLI can carry it.
 - `entity/`, `persistence/` — the outbox row and the consumer watermark with their Panache
   repositories, in this jar's own named persistence unit, plus `ConsumedEvents`, which is native SQL
   over a table with no entity (its javadoc says why).
@@ -370,7 +373,7 @@ both repos on a rename.
 
 ## The suite
 
-128 tests, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+187 tests, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a

@@ -24,7 +24,7 @@ config defaults and its own database.
 
 ## The whole public surface
 
-Twelve types. Everything else in here is how they are kept.
+Fifteen types, plus `EventSelectionException`. Everything else in here is how they are kept.
 
 | | |
 |---|---|
@@ -40,6 +40,9 @@ Twelve types. Everything else in here is how they are kept.
 | `@Uncaused` | the written opt-out, read by the qits-arch-rules suite and by nobody at runtime. |
 | `CatchupSweeper` | explicitly catch up or rebuild one durable projection by its consumer id. |
 | `CatchupResult` | whether that named catch-up reached the log head, or why it did not. |
+| `EventSelection` | which events of one name a consumer wants, by conditions on the payload. |
+| `EventSelectionEvaluator` | whether an event matches a selection. |
+| `EventSelectionGrammar` | the compact text form of a selection, as a CLI takes it. |
 
 Two `@Provider` filters, `CausationClientFilter` and `CausationServerFilter`, apply the header
 automatically; nobody names them, so they are not in the table.
@@ -308,6 +311,43 @@ job (in qits-integrations-quarkus-javalib): its rules require every `@Entity` to
 `CausedRow` or carry `@Uncaused`, so forgetting fails a build and opting out is one reviewable
 line.
 
+### Selecting events by their payload
+
+`EventSelection` says which events of one name a consumer wants, by conditions on the payload. It is
+plain Java and Jackson, with no bean and no Quarkus, so a CLI can use it as well as a service.
+qits-ci's `when:` engine is the origin; this one drops its repository aliasing and adds array
+paths. Declared waits (qits-1153) are the first user.
+
+```java
+EventSelection waitFor = EventSelectionGrammar.parse(
+    "EntityTransitioned", List.of("entities[].number=qits-123 entities[].status=VERIFIED"));
+
+boolean hit = EventSelectionEvaluator.matches(waitFor, frame);           // an EventFrame
+JsonNode payload = EventSelectionEvaluator.parsePayload(frame.payload()); // parse once …
+boolean same = EventSelectionEvaluator.matches(waitFor, frame.name(), payload); // … test many
+```
+
+- **The event name** matches exactly. A selection names one event; `*` is refused.
+- **Groups are ORed, conditions in a group ANDed.** No groups: every event of the name matches.
+- **Text form**, one string per group, whitespace between conditions — the `qits observe --filter`
+  syntax: `path=value`, `path^=value` (prefix), `path?` (present), `!path` (absent). Quote a value
+  with spaces or an empty one: `title="two words"`, `note=""`.
+- **JSON form**, for an HTTP body: `{"event":"…","when":[[{"path":"…","op":"exact|prefix|exists","value":…}]]}`.
+  `exists` takes `"value":true` or `false`; `exact` and `prefix` take a string.
+- **Paths** are field names joined by dots. Values compare as strings: a JSON string by its text,
+  anything else by its JSON literal (`attempt=2`, `blocked=false`). JSON null counts as absent.
+- **Arrays.** `name[]` means "some element of the array at `name`": `entities[].status=VERIFIED`.
+  All conditions in a group through the same `name[]` must hold on **the same element**, so the
+  example above needs one entity that is both qits-123 and VERIFIED. A path that walks into an array
+  without `[]` is absent. A missing or empty array has no elements, so every condition through it
+  fails, `!entities[].x` included; write `!entities` to say there is no list.
+- **Checked at construction.** An invalid selection cannot exist: the constructor, the text parser
+  and `EventSelection.fromJson` throw `EventSelectionException` with a message fit for the caller.
+  Caps: 8 groups, 8 conditions per group, 8 path segments, 256 characters per path, 1024 per value.
+
+A native consumer that binds `EventSelection` from JSON registers `EventSelection`,
+`EventSelection$Condition` and `EventSelection$Op` for reflection, like its other wire types.
+
 ## Configuration
 
 Shipped as `META-INF/microprofile-config.properties` at **ordinal 100**, so the consuming
@@ -460,7 +500,7 @@ prior `mvn install` anywhere. That is the gate, and it is the reason this pom du
 instead of inheriting them. The suite starts its own stub qits-events on a Vert.x server and runs
 the two stores on a **real postgres it spawns itself** — zonky's binaries, resolved as ordinary Maven
 artifacts and started as a child process, never a container — so nothing is skipped for want of
-infrastructure. 128 tests, about twenty seconds.
+infrastructure. 187 tests, about twenty seconds.
 
 `.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, but
 **the consumer owns the reflection registration** — read AGENTS.md's section on it before shipping a
