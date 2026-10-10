@@ -44,7 +44,7 @@ import java.util.Map;
  */
 final class EventsContract {
 
-  // Provider states. The first two are recorded in qits-events-golden-masters 2026.1002.210125.
+  // Provider states, all recorded in qits-events-golden-masters 2026.1010.121628.
   static final String NO_EVENTS = "no events";
   static final String A_FEW_RECENT_EVENTS = "a few recent events";
   static final String ONE_EVENT = "one DeploymentActive event";
@@ -67,7 +67,10 @@ final class EventsContract {
   /** A cursor as the log hands it out, {@code <occurredAt>,<id>}. */
   static final String CURSOR = "2026-01-01T00:00:00Z,00000000-0000-4000-8000-000000000001";
 
-  /** What every frame field the library binds is ({@code EventFrame}), minus {@code environment}. */
+  /**
+   * Every frame field the library binds ({@code EventFrame}) but {@code environment}, which the
+   * state {@value #A_FEW_RECENT_EVENTS} records as null.
+   */
   static final List<String> FRAME =
       List.of(
           "events[*].id",
@@ -141,6 +144,9 @@ final class EventsContract {
     return query;
   }
 
+  /** {@link #FRAME} and {@code environment}: the states that record it carry "dev". */
+  static final List<String> FRAME_WITH_ENVIRONMENT = concat(FRAME, "events[*].environment");
+
   private static List<String> filter(List<String> names) {
     return names.isEmpty() ? List.of("*") : names;
   }
@@ -165,14 +171,8 @@ final class EventsContract {
     assertNotNull(frame.payload(), "payload");
   }
 
-  private static String needs(String state, String operationId, String what) {
-    return "needs provider state '" + state + "' for " + operationId + " in qits-events-service ("
-        + what + ")";
-  }
-
   static final List<Case> CASES =
       List.of(
-          // --- live: recorded states -----------------------------------------------------------
           new Case(INITIALIZE, "one name", NO_EVENTS, LIST_EVENTS,
               newestQuery(List.of(DEPLOYMENT_ACTIVE)), null, List.of("events"),
               newestIsNull(List.of(DEPLOYMENT_ACTIVE)), null),
@@ -194,47 +194,42 @@ final class EventsContract {
                 assertNull(page.nextCursor(), "three events fit one page");
               },
               null),
-          // --- pending: states qits-events has not recorded yet ---------------------------------
           new Case(INITIALIZE, "one name, found", ONE_EVENT, LIST_EVENTS,
               newestQuery(List.of(DEPLOYMENT_ACTIVE)), null,
-              List.of("events[*].id", "events[*].occurredAt"),
+              List.of("events[*].id", "events[*].occurredAt", "events[*].environment"),
               (client, params) -> {
                 EventFrame newest = client.newest(List.of(DEPLOYMENT_ACTIVE));
                 assertNotNull(newest, "the log's one event is its newest");
-                assertNotNull(newest.id());
+                assertEquals(params.get("eventId"), newest.id());
                 assertNotNull(newest.occurredAt());
+                assertEquals("dev", newest.environment());
               },
-              needs(ONE_EVENT, LIST_EVENTS, "exactly one DeploymentActive event, so"
-                  + " ?limit=1&name=DeploymentActive answers it; frames with id and occurredAt")),
+              null),
           new Case(CATCH_UP, "one name, a full page", MORE_THAN_A_PAGE, LIST_EVENTS,
               pageQuery(List.of(DEPLOYMENT_ACTIVE), null), null,
-              concat(FRAME, "nextCursor"),
+              concat(FRAME_WITH_ENVIRONMENT, "nextCursor"),
               (client, params) -> {
                 ContractProbe.Page page = client.after(List.of(DEPLOYMENT_ACTIVE), null);
                 assertEquals(ContractProbe.PAGE_SIZE, page.events().size());
                 page.events().forEach(EventsContract::assertFrame);
+                page.events().forEach(e -> assertEquals("dev", e.environment()));
                 assertNotNull(page.nextCursor(), "a full page with more behind it names the next");
               },
-              needs(MORE_THAN_A_PAGE, LIST_EVENTS, "201 DeploymentActive events; recorded with"
-                  + " ?order=asc&limit=200&name=DeploymentActive: 200 frames and a non-null"
-                  + " nextCursor, kept in the recording")),
+              null),
           new Case(OUTBOX, "a new id", NO_EVENT_WITH_THE_ID, PUBLISH_EVENT,
               Map.of(), ContractProbe.body(ENVELOPE), List.of(),
               (client, params) -> {
                 EventsPublisher.Delivery delivery = client.put(params.get("eventId"), ENVELOPE);
                 assertTrue(delivery.delivered(), "a new id is delivered: " + delivery);
               },
-              needs(NO_EVENT_WITH_THE_ID, PUBLISH_EVENT, "param eventId, a uuid the log does not"
-                  + " hold; PUT /events/api/events/{eventId} with an envelope answers 201")),
+              null),
           new Case(OUTBOX, "a reused id", AN_EVENT_WITH_THE_ID, PUBLISH_EVENT,
               Map.of(), ContractProbe.body(ENVELOPE), List.of(),
               (client, params) -> {
                 EventsPublisher.Delivery delivery = client.put(params.get("eventId"), ENVELOPE);
                 assertTrue(delivery.rejected(), "a reused id is rejected for good: " + delivery);
               },
-              needs(AN_EVENT_WITH_THE_ID, PUBLISH_EVENT, "param eventId, a uuid the log holds with"
-                  + " other content; PUT /events/api/events/{eventId} with a different envelope"
-                  + " answers 400")));
+              null));
 
   private static List<String> concat(List<String> list, String more) {
     List<String> all = new java.util.ArrayList<>(list);
