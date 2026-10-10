@@ -1,3 +1,12 @@
 archetype: maven-library
 artifacts:
   - { type: maven, name: "eu.wohlben.qits:qits-eventstream", sbom: target/sbom.json }
+# THE CONTRACTS (qits-1149). This library's consumer pact with qits-events (the catch-up reads and
+# the publish), flat in `pacts/` as `qits-eventstream-javalib_qits-events-service.json`. qits-ci
+# packs it into eu.wohlben.qits:qits-eventstream-javalib-pacts-qits-events-service and publishes
+# it only when it changed. `contracts/EventsPactFileTest` keeps the file current. No golden
+# masters: this library serves no REST API.
+contracts:
+  application: qits-eventstream
+  pacts:
+    qits-events-service: { packages: [maven] }
