@@ -61,6 +61,12 @@ produces one jar. The pom is the parent and the module at once.
 - `testdb/` (test sources only) — `EmbeddedPg` and `EmbeddedPgConfigSource`, the embedded postgres
   the suite runs the outbox against. It is under this library's package like everything else here,
   because the extraction rule admits no other.
+- `contracts/` (test sources only) — the consumer pact with qits-events (qits-1149). `EventsContract`
+  lists every REST call this library makes; `EventsConsumerPactTest` runs the real clients (through
+  `control/ContractProbe`) against a pact mock server; `EventsPactFileTest` keeps
+  `pacts/qits-eventstream-javalib_qits-events-service.json` current (`-Dgolden.update=true`
+  rewrites it). Answers come from qits-events' golden masters, a test-scoped jar from the platform
+  repository. A row whose provider state is not recorded yet is skipped with the state it needs.
 
 **THE EXTRACTION RULE, which outlived the extraction.** No `eu.wohlben.qits.*` package other than
 this one may appear in these sources, main or test. It was written inside qits-ci to keep lifting

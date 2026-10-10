@@ -1,0 +1,2594 @@
+{
+  "consumer": {
+    "name": "qits-eventstream-javalib"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.catchUp"
+          }
+        }
+      },
+      "description": "CatchupSweeper.catchUp: listEvents (every name, from the start)",
+      "key": "2736cac4",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a few recent events",
+          "params": {
+            "deploymentEventId": "00000000-0000-4000-8000-000000000001",
+            "requestEventId": "00000000-0000-4000-8000-000000000002",
+            "ticketEventId": "00000000-0000-4000-8000-000000000003"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "asc"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": [
+              {
+                "description": "qits-projects is deployed",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": "00000000-0000-4000-8000-000000000003",
+                "payload": "{\"application\":\"qits-projects\"}"
+              },
+              {
+                "description": "qits-projects is deployed",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": "00000000-0000-4000-8000-000000000003",
+                "payload": "{\"application\":\"qits-projects\"}"
+              },
+              {
+                "description": "qits-projects is deployed",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": "00000000-0000-4000-8000-000000000003",
+                "payload": "{\"application\":\"qits-projects\"}"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.events": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 3
+                }
+              ]
+            },
+            "$.events[*].description": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.events[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.events[*].name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.events[*].occurredAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:?\\d{2})$"
+                }
+              ]
+            },
+            "$.events[*].parentId": {
+              "combine": "OR",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                },
+                {
+                  "match": "null"
+                }
+              ]
+            },
+            "$.events[*].payload": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.catchUp"
+          }
+        }
+      },
+      "description": "CatchupSweeper.catchUp: listEvents (one name, a full page)",
+      "key": "7f004608",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "more than a page of DeploymentActive events"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "name": [
+            "DeploymentActive"
+          ],
+          "order": [
+            "asc"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": [
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              },
+              {
+                "description": null,
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "name": "DeploymentActive",
+                "occurredAt": "2026-01-01T00:00:00Z",
+                "parentId": null,
+                "payload": "{\"applicationName\":\"qits-ci\",\"browserHost\":\"ci.qits.example\",\"endpoints\":[{\"path\":\"/ci\",\"upstreamHost\":\"dev-qits-ci\",\"upstreamPort\":8080}],\"environmentName\":\"dev\",\"navigation\":[{\"label\":\"CI\",\"position\":10,\"slot\":\"main\",\"subpath\":\"/\"}],\"version\":\"2026.101.100001\"}"
+              }
+            ],
+            "nextCursor": "2100-01-01T00:03:20Z,00000000-0000-4000-8000-0000000000c8"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.events": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 200,
+                  "min": 200
+                }
+              ]
+            },
+            "$.events[*].environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.events[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.events[*].name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.events[*].occurredAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:?\\d{2})$"
+                }
+              ]
+            },
+            "$.events[*].payload": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.nextCursor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.catchUp"
+          }
+        }
+      },
+      "description": "CatchupSweeper.catchUp: listEvents (one name, from the start)",
+      "key": "9692f079",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no events"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "name": [
+            "DeploymentActive"
+          ],
+          "order": [
+            "asc"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.catchUp"
+          }
+        }
+      },
+      "description": "CatchupSweeper.catchUp: listEvents (two names, after a cursor)",
+      "key": "8a0a6720",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no events"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "cursor": [
+            "2026-01-01T00:00:00Z,00000000-0000-4000-8000-000000000001"
+          ],
+          "limit": [
+            "200"
+          ],
+          "name": [
+            "ProjectCreated,ProjectChanged"
+          ],
+          "order": [
+            "asc"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.initialize"
+          }
+        }
+      },
+      "description": "CatchupSweeper.initialize: listEvents (every name)",
+      "key": "302456cb",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no events"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "1"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.initialize"
+          }
+        }
+      },
+      "description": "CatchupSweeper.initialize: listEvents (one name)",
+      "key": "943a1c44",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no events"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "1"
+          ],
+          "name": [
+            "DeploymentActive"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "listEvents"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "CatchupSweeper.initialize"
+          }
+        }
+      },
+      "description": "CatchupSweeper.initialize: listEvents (one name, found)",
+      "key": "c3fb8f01",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "one DeploymentActive event",
+          "params": {
+            "eventId": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/events/api/events",
+        "query": {
+          "limit": [
+            "1"
+          ],
+          "name": [
+            "DeploymentActive"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "content": {
+            "events": [
+              {
+                "environment": "dev",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "occurredAt": "2026-01-01T00:00:00Z"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.events": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.events[*].environment": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.events[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.events[*].occurredAt": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:?\\d{2})$"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "publishEvent"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "OutboxSweeper.tick"
+          }
+        }
+      },
+      "description": "OutboxSweeper.tick: publishEvent (a new id)",
+      "key": "a196c66b",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "no event with the given id",
+          "params": {
+            "eventId": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "description": null,
+            "environment": null,
+            "name": "DeploymentActive",
+            "occurredAt": "2026-01-01T00:00:00Z",
+            "parentId": null,
+            "payload": "{\"application\":\"qits-eventstream-pact\"}"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "generators": {
+          "path": {
+            "dataType": "RAW",
+            "expression": "/events/api/events/${eventId}",
+            "type": "ProviderState"
+          }
+        },
+        "headers": {
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "method": "PUT",
+        "path": "/events/api/events/00000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "status": 201
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-events-service",
+            "operationId": "publishEvent"
+          },
+          "qits-trigger": {
+            "app": "qits-eventstream-javalib",
+            "kind": "schedule",
+            "schedule": "OutboxSweeper.tick"
+          }
+        }
+      },
+      "description": "OutboxSweeper.tick: publishEvent (a reused id)",
+      "key": "1c7f8ca9",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "an event with the given id",
+          "params": {
+            "eventId": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "description": null,
+            "environment": null,
+            "name": "DeploymentActive",
+            "occurredAt": "2026-01-01T00:00:00Z",
+            "parentId": null,
+            "payload": "{\"application\":\"qits-eventstream-pact\"}"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "generators": {
+          "path": {
+            "dataType": "RAW",
+            "expression": "/events/api/events/${eventId}",
+            "type": "ProviderState"
+          }
+        },
+        "headers": {
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "method": "PUT",
+        "path": "/events/api/events/00000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "status": 400
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-events-service"
+  }
+}
