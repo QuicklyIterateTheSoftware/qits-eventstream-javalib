@@ -1,7 +1,10 @@
 package eu.wohlben.qits.eventstream.control;
 
 import eu.wohlben.qits.eventstream.QitsRawEventListener;
+import eu.wohlben.qits.http.QitsHttpClients;
+import io.opentelemetry.api.OpenTelemetry;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -72,11 +75,34 @@ public class EventsQuery {
     }
   }
 
-  private final HttpClient client =
-      HttpClient.newBuilder()
-          .version(HttpClient.Version.HTTP_1_1)
-          .connectTimeout(Duration.ofSeconds(2))
-          .build();
+  /**
+   * Wrapped through {@link QitsHttpClients} (qits-1198): a read from qits-events is a
+   * service-to-service call like any other, so it opens a CLIENT span and carries {@code
+   * X-Qits-Caller} on top of the two headers below, which stay exactly as they were — that pair is
+   * the forward-auth principal qits-events authorizes on, and the caller header is diagnostic only.
+   */
+  private final HttpClient client;
+
+  /**
+   * For a consumer that builds this class by hand instead of letting CDI inject it, as several
+   * consumer-pact probes across the estate do — {@code new EventsQuery()}, then a package-private
+   * field set directly. Kept public and working rather than broken by this change: equivalent to
+   * {@code EventsQuery(QitsHttpClients.of(OpenTelemetry.noop(), null))}, no span, no caller
+   * header, the raw client's behaviour exactly.
+   */
+  public EventsQuery() {
+    this(QitsHttpClients.of(OpenTelemetry.noop(), null));
+  }
+
+  @Inject
+  EventsQuery(QitsHttpClients clients) {
+    this.client =
+        clients.wrap(
+            HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(2))
+                .build());
+  }
 
   @ConfigProperty(name = "qits.events.url")
   String eventsUrl;

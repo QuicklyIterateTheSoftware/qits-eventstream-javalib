@@ -62,6 +62,11 @@
              Central nor part of the Quarkus platform. A clone still tests green with that
              repository reachable, or offline once the jar is in ~/.m2. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
+        <!-- qits-http-core (qits-1198): QitsHttpClients wraps EventsPublisher's and EventsQuery's
+             HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
+             instead of the receiver seeing a parentless SERVER span. Compile scope below, so a
+             consuming service's Quarkus module gets CallerServerFilter transitively too. -->
+        <qits.http-core.version>0-qits-1198-local</qits.http-core.version>
         <!-- The consumer pact with qits-events (qits-1149): pact-jvm's consumer half, on the version
              every provider on the estate verifies with, and qits-events' recorded answers
              (golden-masters/index.json + one JSON per state and operation), read by
@@ -122,6 +127,13 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <!-- QitsHttpClients, for EventsPublisher and EventsQuery's HttpClients (qits-1198).
+                 Compile scope, so a consuming service's classpath carries CallerServerFilter too. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-http-core</artifactId>
+            <version>${qits.http-core.version}</version>
         </dependency>
         <dependency>
             <!-- The outbox is a Panache entity in this module's OWN named persistence unit; see

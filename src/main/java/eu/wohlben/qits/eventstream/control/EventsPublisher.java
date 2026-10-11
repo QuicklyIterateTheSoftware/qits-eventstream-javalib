@@ -1,6 +1,9 @@
 package eu.wohlben.qits.eventstream.control;
 
+import eu.wohlben.qits.http.QitsHttpClients;
+import io.opentelemetry.api.OpenTelemetry;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -114,12 +117,34 @@ public class EventsPublisher {
    * is for — but it is a wasted round trip on every single publish, and it is the kind of thing
    * that is invisible until something counts requests. qits-events speaks plain HTTP/1.1 on
    * qits-net; there is nothing to upgrade to.
+   *
+   * <p>Wrapped through {@link QitsHttpClients} (qits-1198): a PUT to qits-events is a
+   * service-to-service call like any other, so it opens a CLIENT span and carries {@code
+   * X-Qits-Caller} on top of the two headers below, which stay exactly as they were — that pair is
+   * the forward-auth principal qits-events authorizes on, and the caller header is diagnostic only.
    */
-  private final HttpClient client =
-      HttpClient.newBuilder()
-          .version(HttpClient.Version.HTTP_1_1)
-          .connectTimeout(Duration.ofSeconds(2))
-          .build();
+  private final HttpClient client;
+
+  /**
+   * For a consumer that builds this class by hand instead of letting CDI inject it, as several
+   * consumer-pact probes across the estate do — {@code new EventsPublisher()}, then a
+   * package-private field set directly. Kept public and working rather than broken by this
+   * change: equivalent to {@code EventsPublisher(QitsHttpClients.of(OpenTelemetry.noop(), null))},
+   * no span, no caller header, the raw client's behaviour exactly.
+   */
+  public EventsPublisher() {
+    this(QitsHttpClients.of(OpenTelemetry.noop(), null));
+  }
+
+  @Inject
+  EventsPublisher(QitsHttpClients clients) {
+    this.client =
+        clients.wrap(
+            HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(2))
+                .build());
+  }
 
   @ConfigProperty(name = "qits.events.url")
   String eventsUrl;

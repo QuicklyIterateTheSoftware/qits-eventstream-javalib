@@ -43,9 +43,19 @@ class ExtractionRuleTest {
   /**
    * Any package of this platform's that is not this library's own. The negative lookahead is what
    * makes the rule directional rather than a list of repositories to keep up to date.
+   *
+   * <p><b>{@code eu.wohlben.qits.http} is exempt too (qits-1198).</b> It is qits-http-core —
+   * {@code QitsHttpClients}, the wrapper {@link eu.wohlben.qits.eventstream.control.EventsPublisher}
+   * and {@link eu.wohlben.qits.eventstream.control.EventsQuery} build their {@code HttpClient}
+   * through — and it sits upstream of every consumer of this jar exactly as
+   * {@code jakarta.ws.rs} does, never downstream of one: nothing in it names a consumer's package,
+   * so a reference to it does not point the arrow this rule polices back at anybody. The rule stays
+   * a rejection of consumer packages, not of every {@code eu.wohlben.qits.*} name on principle —
+   * qits-db-core is the other upstream library and is kept out of source on purpose (README), but
+   * only because its one use is a config string that never needed the class imported at all.
    */
   private static final Pattern FOREIGN =
-      Pattern.compile("eu\\.wohlben\\.qits\\.(?!eventstream\\b)\\w+");
+      Pattern.compile("eu\\.wohlben\\.qits\\.(?!eventstream\\b|http\\b)\\w+");
 
   @Test
   void noSourceHereNamesAConsumersPackage() throws IOException {
