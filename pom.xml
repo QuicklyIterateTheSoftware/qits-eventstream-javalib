@@ -66,7 +66,7 @@
              HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
              instead of the receiver seeing a parentless SERVER span. Compile scope below, so a
              consuming service's Quarkus module gets CallerServerFilter transitively too. -->
-        <qits.http-core.version>0-qits-1198-local</qits.http-core.version>
+        <qits.http-core.version>2026.1011.185745</qits.http-core.version>
         <!-- The consumer pact with qits-events (qits-1149): pact-jvm's consumer half, on the version
              every provider on the estate verifies with, and qits-events' recorded answers
              (golden-masters/index.json + one JSON per state and operation), read by
