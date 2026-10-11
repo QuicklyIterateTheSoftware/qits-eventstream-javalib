@@ -363,6 +363,8 @@ application (250) and the environment (300) override any of it. A library jar's 
 | `qits.eventstream.sweep-interval` | `10s` | how often the sweeper looks. A floor on how late a retry can be, never a cause of an early one. |
 | `qits.eventstream.redial-initial-backoff` | `PT1S` | doubled per consecutive failure. |
 | `qits.eventstream.redial-max-backoff` | `PT30S` | the cap. |
+| `qits.eventstream.stream-ping-interval` | `PT30S` | how often the stream is pinged. Keeps a quiet stream alive through a swarm VIP, which forgets a flow idle for fifteen minutes and tells neither end. |
+| `qits.eventstream.stream-silence-limit` | `PT90S` | a stream that sent no frame and no pong for this long is closed and redialled. |
 | `qits.eventstream.catchup-interval` | `PT30S` | how often each durable consumer's watermark is paged forward. The worst-case lateness of an event the **stream** did not deliver. |
 | `qits.eventstream.catchup-at-startup` | `true` | also sweep once at boot — the cutover cure. On its own thread, so it never delays a start. A test suite turns it off. |
 | `qits.eventstream.sweep-stall-budget` | `PT5M` | how long one sweep may hold the catch-up lock before the watchdog names it in an ERROR, interrupts its thread and puts the `eventstream-catchup` readiness check DOWN. Generous on purpose: a long sweep draining a real backlog is normal, and only "no honest sweep runs this long" is the fault. |

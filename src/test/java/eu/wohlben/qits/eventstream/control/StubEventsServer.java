@@ -141,6 +141,16 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
     }
   }
 
+  /**
+   * Stop reading every open stream, so pings go unanswered and nothing more arrives — a flow the
+   * swarm VIP forgot, from the client's point of view. The sockets stay open on this side.
+   */
+  public static void silenceStreams() {
+    for (ServerWebSocket socket : openSockets()) {
+      socket.pause();
+    }
+  }
+
   /** How many stream connections are open right now. */
   public static int openStreams() {
     return openSockets().size();

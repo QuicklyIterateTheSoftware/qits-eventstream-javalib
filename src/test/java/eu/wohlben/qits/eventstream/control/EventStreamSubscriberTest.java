@@ -2,6 +2,7 @@ package eu.wohlben.qits.eventstream.control;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eu.wohlben.qits.eventstream.control.TestEvents.OtherThingListener;
@@ -187,6 +188,34 @@ class EventStreamSubscriberTest {
         frame("ThingHappened", when, CanonicalJson.payload(new ThingHappened("after", 1, when))));
     await(() -> !things.received().isEmpty(), "the reconnected stream to deliver");
     assertEquals("after", things.received().get(0).what());
+  }
+
+  /**
+   * qits-1177: a stream that goes silent without closing — what a swarm VIP leaves behind when it
+   * forgets an idle flow — is dropped and redialled, and the late close of the dropped one does not
+   * open a second stream.
+   */
+  @Test
+  void aSilentStreamIsDroppedAndRedialled() throws Exception {
+    StubEventsServer.reset();
+    StubEventsServer.silenceStreams();
+
+    String frame = StubEventsServer.awaitSubscribeFrame(PATIENCE);
+    assertNotNull(frame, "expected a subscribe frame on a new stream after the silence");
+    assertEquals(SUBSCRIBE_FRAME, frame);
+    await(subscriber::connected, "the stream to be back up");
+
+    Instant when = Instant.parse("2026-10-11T05:41:58Z");
+    StubEventsServer.broadcast(
+        frame("ThingHappened", when, CanonicalJson.payload(new ThingHappened("heard", 1, when))));
+    await(() -> !things.received().isEmpty(), "the new stream to deliver");
+    assertEquals("heard", things.received().get(0).what());
+
+    // Pings keep the new stream alive past the limit, and the late close of the dropped one opens
+    // no second stream: either would send another subscribe frame.
+    assertNull(
+        StubEventsServer.awaitSubscribeFrame(Duration.ofSeconds(4)), "no further redial expected");
+    assertTrue(subscriber.connected());
   }
 
   /**

@@ -5,6 +5,7 @@ import io.quarkus.runtime.StartupEvent;
 import io.quarkus.websockets.next.BasicWebSocketConnector;
 import io.quarkus.websockets.next.WebSocketClientConnection;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -39,6 +42,16 @@ import org.jboss.logging.Logger;
  * The backoff is capped, and the subscribe frame is re-sent on every open — the server holds the
  * subscription set per connection, so a reconnect that did not resubscribe would be a socket that
  * is up and deaf.
+ *
+ * <p><b>A quiet stream is pinged, and a silent one is dropped (qits-1177).</b> The stream crosses a
+ * swarm service VIP, and IPVS forgets a TCP flow that carries no bytes for fifteen minutes without
+ * telling either end. On 2026-10-10 every subscriber on the estate went deaf that way after a
+ * 24-minute lull: qits-events dropped the far end, this side kept a socket that looked open, no
+ * close ever came, and nothing redialled. Durable listeners then lived on the catch-up sweep alone,
+ * and an event the sweep cannot see — one stamped below the watermark — was lost. So every {@code
+ * qits.eventstream.stream-ping-interval} the subscriber pings, which keeps the flow alive, and any
+ * frame or pong counts as hearing from the far side. A stream that has said nothing for {@code
+ * qits.eventstream.stream-silence-limit} is closed and redialled like any other drop.
  *
  * <p>Nothing is dialled when the module is disabled, and nothing is dialled when the union is empty
  * — an open stream nobody reads is a connection qits-events maintains for no one. Note what that
@@ -70,13 +83,30 @@ public class EventStreamSubscriber {
   @ConfigProperty(name = "qits.eventstream.redial-max-backoff", defaultValue = "PT30S")
   Duration redialMaxBackoff;
 
+  @ConfigProperty(name = "qits.eventstream.stream-ping-interval", defaultValue = "PT30S")
+  Duration pingInterval;
+
+  @ConfigProperty(name = "qits.eventstream.stream-silence-limit", defaultValue = "PT90S")
+  Duration silenceLimit;
+
   private final AtomicInteger consecutiveFailures = new AtomicInteger();
 
   /** One redial timer at a time. A failed connect and a close can both ask; only the first arms it. */
   private final AtomicBoolean redialArmed = new AtomicBoolean();
 
   private volatile boolean running;
-  private volatile WebSocketClientConnection connection;
+
+  /**
+   * The open stream, or null. Only the close of THIS connection redials: a connection the silence
+   * check already dropped closes later, and a redial for it would open a second stream.
+   */
+  private final AtomicReference<WebSocketClientConnection> connection = new AtomicReference<>();
+
+  /** {@link System#nanoTime()} when the far side last sent anything: a frame, a pong, the open. */
+  private final AtomicLong lastHeard = new AtomicLong();
+
+  /** The ping timer, or -1 when none runs. */
+  private volatile long pingTimer = -1;
 
   void onStart(@Observes StartupEvent ignored) {
     if (!enabled) {
@@ -98,14 +128,21 @@ public class EventStreamSubscriber {
   public void start() {
     running = true;
     consecutiveFailures.set(0);
+    if (pingTimer == -1) {
+      pingTimer = vertx.setPeriodic(Math.max(1L, pingInterval.toMillis()), ignored -> keepAlive());
+    }
     dial();
   }
 
   /** Stop dialling and drop the current stream. Idempotent. */
   public void stop() {
     running = false;
-    WebSocketClientConnection open = connection;
-    connection = null;
+    long timer = pingTimer;
+    pingTimer = -1;
+    if (timer != -1) {
+      vertx.cancelTimer(timer);
+    }
+    WebSocketClientConnection open = connection.getAndSet(null);
     if (open != null && open.isOpen()) {
       // Bounded, and shorter than a send would get: the peer this is being polite to is one we are
       // walking away from either way.
@@ -119,7 +156,7 @@ public class EventStreamSubscriber {
 
   /** Whether the stream is up right now — the subscriber's own liveness, for tests and health. */
   public boolean connected() {
-    WebSocketClientConnection open = connection;
+    WebSocketClientConnection open = connection.get();
     return open != null && open.isOpen();
   }
 
@@ -138,9 +175,14 @@ public class EventStreamSubscriber {
         // callback therefore must not run on an event loop.
         .executionModel(BasicWebSocketConnector.ExecutionModel.BLOCKING)
         .onOpen(this::onOpen)
-        .onTextMessage((connection, text) -> dispatcher.dispatch(text))
-        .onError((connection, failure) -> LOG.debugf("event stream error: %s", failure.toString()))
-        .onClose((connection, reason) -> onClose(reason == null ? "" : reason.toString()))
+        .onTextMessage(
+            (open, text) -> {
+              heard();
+              dispatcher.dispatch(text);
+            })
+        .onPong((open, data) -> heard())
+        .onError((open, failure) -> LOG.debugf("event stream error: %s", failure.toString()))
+        .onClose((closed, reason) -> onClose(closed, reason == null ? "" : reason.toString()))
         .connect()
         .subscribe()
         .with(
@@ -152,17 +194,54 @@ public class EventStreamSubscriber {
   }
 
   private void onOpen(WebSocketClientConnection opened) {
-    connection = opened;
+    heard();
+    connection.set(opened);
     consecutiveFailures.set(0);
     subscribe(opened);
   }
 
-  private void onClose(String reason) {
-    connection = null;
+  private void onClose(WebSocketClientConnection closed, String reason) {
+    if (!connection.compareAndSet(closed, null)) {
+      // Not the current stream: one the silence check already dropped and redialled for.
+      return;
+    }
     if (!running) {
       return;
     }
     LOG.debugf("event stream closed (%s); redialling", reason);
+    redial();
+  }
+
+  private void heard() {
+    lastHeard.set(System.nanoTime());
+  }
+
+  /**
+   * The ping timer's tick, on the event loop, so nothing here may block. Pings an open stream that
+   * has been heard from recently; drops and redials one that has not.
+   */
+  void keepAlive() {
+    WebSocketClientConnection open = connection.get();
+    if (!running || open == null) {
+      return;
+    }
+    long silent = System.nanoTime() - lastHeard.get();
+    if (silent < silenceLimit.toNanos()) {
+      open.sendPing(Buffer.buffer())
+          .subscribe()
+          .with(sent -> {}, failure -> LOG.debugf("ping not sent: %s", failure.toString()));
+      return;
+    }
+    if (!connection.compareAndSet(open, null)) {
+      return;
+    }
+    LOG.warnf(
+        "event stream silent for %s, past the %s limit; dropping it and redialling",
+        Duration.ofNanos(silent),
+        silenceLimit);
+    open.close()
+        .subscribe()
+        .with(closed -> {}, failure -> LOG.debugf("silent stream close failed: %s", failure.toString()));
     redial();
   }
 
