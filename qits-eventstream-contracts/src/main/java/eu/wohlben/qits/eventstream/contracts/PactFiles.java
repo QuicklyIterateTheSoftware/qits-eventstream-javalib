@@ -26,6 +26,15 @@ import org.junit.jupiter.api.Assumptions;
  * the conventions of qits-pact-consumer's {@code ConsumerPact}, so a service's eventstream pact
  * reads like its other pacts.
  *
+ * <p><b>A library bump only refreshes the label</b> (qits-1163). Every interaction's {@code
+ * comments.references.qits-via.version} names the qits-eventstream on the classpath, so a bump of
+ * the service's pin changes it. The comparison therefore masks that one value on both sides: when
+ * the masked forms agree and only the version differs, the committed file is rewritten in place
+ * and the test passes, printing one line. The rows themselves always come from the pinned library
+ * on every build; only the version label in the committed file can lag, until the next run that
+ * sees it rewrites it. Any other difference fails as before (or is rewritten under {@code
+ * golden.update}).
+ *
  * <p>Normalised: interactions sorted by description then state, pact-jvm's own version stripped,
  * 2-space indentation ({@code JSON.stringify(value, null, 2)}), one trailing newline.
  */
@@ -78,14 +87,50 @@ final class PactFiles {
           Files.exists(committed),
           committed.toAbsolutePath()
               + " is missing: run once with -D" + UPDATE_PROPERTY + "=true and review it");
+      String expected = Files.readString(committed);
+      if (!expected.equals(actual) && maskVia(expected).equals(maskVia(actual))) {
+        Files.writeString(committed, actual);
+        System.out.println(
+            committed + ": qits-via version refreshed from " + viaVersion(expected) + " to "
+                + viaVersion(actual) + " (the rows are unchanged)");
+        return;
+      }
       Assertions.assertEquals(
-          Files.readString(committed),
+          expected,
           actual,
           committed + " differs from what the eventstream pact writes; rerun with -D"
               + UPDATE_PROPERTY + "=true if the change is intended");
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
+  }
+
+  static final String MASK = "<qits-via version>";
+
+  /** {@code text} reprinted with every interaction's qits-via version replaced by {@link #MASK}. */
+  static String maskVia(String text) throws IOException {
+    ObjectNode pact = (ObjectNode) MAPPER.readTree(text);
+    for (JsonNode interaction : pact.path("interactions")) {
+      if (interaction.path("comments").path("references").path("qits-via") instanceof ObjectNode via
+          && via.has("version")) {
+        via.put("version", MASK);
+      }
+    }
+    StringBuilder out = new StringBuilder();
+    print(pact, "", out);
+    return out.toString();
+  }
+
+  /** The distinct qits-via versions the file names, comma-joined (one, in a well-formed file). */
+  static String viaVersion(String text) throws IOException {
+    java.util.Set<String> versions = new java.util.TreeSet<>();
+    for (JsonNode interaction : MAPPER.readTree(text).path("interactions")) {
+      JsonNode version = interaction.path("comments").path("references").path("qits-via").path("version");
+      if (version.isTextual()) {
+        versions.add(version.asText());
+      }
+    }
+    return String.join(",", versions);
   }
 
   /** The pact as pact-jvm's own writer serialises it. */

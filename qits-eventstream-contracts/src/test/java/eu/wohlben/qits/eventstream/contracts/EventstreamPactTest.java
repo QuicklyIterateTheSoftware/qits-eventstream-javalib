@@ -142,6 +142,38 @@ class EventstreamPactTest {
         AssertionError.class, () -> PACT.compareOrWritePactFile(pacts));
   }
 
+  /** A library bump: only qits-via's version differs, so the file is refreshed and the test passes. */
+  @Test
+  void aViaVersionOnlyDifferenceRewritesTheFileAndPasses(@TempDir Path pacts) throws IOException {
+    Path file = pacts.resolve(PACT.file());
+    String current = PactFiles.normalise(PactFiles.written(PACT.pact()));
+    String version = EventstreamVia.current().version();
+    String older = current.replace("\"version\": \"" + version + "\"", "\"version\": \"2026.1.000001\"");
+    assertFalse(older.equals(current), "the fixture must actually change the via version");
+    Files.writeString(file, older);
+
+    PACT.compareOrWritePactFile(pacts);
+
+    assertEquals(current, Files.readString(file), "rewritten in place at the pinned version");
+  }
+
+  /** A row difference still fails, and leaves the committed file alone. */
+  @Test
+  void aRowDifferenceStillFails(@TempDir Path pacts) throws IOException {
+    Path file = pacts.resolve(PACT.file());
+    String current = PactFiles.normalise(PactFiles.written(PACT.pact()));
+    String version = EventstreamVia.current().version();
+    String changed = current
+        .replace("\"version\": \"" + version + "\"", "\"version\": \"2026.1.000001\"")
+        .replace("\"200\"", "\"100\"");
+    assertFalse(changed.equals(current));
+    Files.writeString(file, changed);
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        AssertionError.class, () -> PACT.compareOrWritePactFile(pacts));
+    assertEquals(changed, Files.readString(file), "a failing comparison rewrites nothing");
+  }
+
   private static List<String> names(JsonNode node) {
     List<String> names = new java.util.ArrayList<>();
     node.fieldNames().forEachRemaining(names::add);

@@ -373,6 +373,11 @@ public final class EventstreamPact {
    * pacts/<file>} in the repository root (or {@code -Dqits.pacts.dir}): compared by default,
    * rewritten under {@code -Dgolden.update=true} or {@code QITS_GOLDEN_UPDATE=true}. With no row at
    * all the test is skipped, and fails if a file is still committed.
+   *
+   * <p>A difference in {@code qits-via}'s version ALONE — a bump of the service's qits-eventstream
+   * pin — does not fail: the file is rewritten in place and one line says so. The rows always come
+   * from the pinned library on every build; only the version label can lag until the next run
+   * rewrites it. So an automated library bump never rejects the service's release.
    */
   public void compareOrWritePactFile() {
     compareOrWritePactFile(PactFiles.pactsDirectory());

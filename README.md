@@ -529,8 +529,12 @@ no pact. Each row runs this library's real `EventsQuery` / `EventsPublisher` aga
 server. The file is `pacts/<service>_qits-eventstream-javalib_qits-events-service.json` in the
 service's repository root, compared byte for byte and rewritten with `-Dgolden.update=true` (or
 `QITS_GOLDEN_UPDATE=true`). Every interaction carries `qits-call`, `qits-trigger` (app: the service)
-and `qits-via` — this library's repository, artifact and the version on the service's classpath,
-so a library bump changes the file and wants a rewrite.
+and `qits-via` — this library's repository, artifact and the version on the service's classpath.
+**A library bump does not fail the test**: the comparison masks `qits-via.version` on both sides,
+and when that label is the only difference the committed file is rewritten in place, with one line
+saying the via version was refreshed from X to Y. The rows always come from the pinned library on
+every build; only the version label can lag until the next local run rewrites it. Any other
+difference fails as before.
 
 **The guard** fails the file test, naming the class, when the service's compiled classes hold a
 durable or raw listener that was not passed, or a class using `QitsEventBus` while `publishes` is
