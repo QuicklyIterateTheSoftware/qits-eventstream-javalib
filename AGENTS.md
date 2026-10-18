@@ -32,8 +32,13 @@ run loads config sources in more than one classloader, and the property is the o
 copies share. Testcontainers is not on this classpath and must not arrive; `quarkus.devservices.enabled=false`
 says the same thing about the other way a container gets started.
 
-**This is a library, so there is one maven module at the root and no `service/` split.** The repo
-produces one jar. The pom is the parent and the module at once.
+**This is a library: a reactor of two jar modules and no `service/` split** (qits-1163). The root
+`pom.xml` is `qits-eventstream-parent` — versions, repository, plugin setup — and is never published
+(the platform uploads flattened poms). `qits-eventstream/` is the library, coordinates unchanged.
+`qits-eventstream-contracts/` is the test-scope contracts kit (below); release.yml `link:`s it to the
+library, so it is never bundled into the kit and the two publish together. The release stamp
+rewrites the root `<version>` and each module's `<parent><version>`; the kit's dependency on the
+library carries no literal version.
 
 ## Where things live
 
@@ -61,12 +66,34 @@ produces one jar. The pom is the parent and the module at once.
 - `testdb/` (test sources only) — `EmbeddedPg` and `EmbeddedPgConfigSource`, the embedded postgres
   the suite runs the outbox against. It is under this library's package like everything else here,
   because the extraction rule admits no other.
-- `contracts/` (test sources only) — the consumer pact with qits-events (qits-1149). `EventsContract`
-  lists every REST call this library makes; `EventsConsumerPactTest` runs the real clients (through
-  `control/ContractProbe`) against a pact mock server; `EventsPactFileTest` keeps
-  `pacts/qits-eventstream-javalib_qits-events-service.json` current (`-Dgolden.update=true`
-  rewrites it). Answers come from qits-events' golden masters, a test-scoped jar from the platform
-  repository. A row whose provider state is not recorded yet is skipped with the state it needs.
+- `contracts/` — **not in this module any more.** The library writes and publishes no pact of its
+  own (qits-1163): a call a library makes for a service is pacted by that service, as consumer,
+  against the library version it pins. What used to be the library's own table is now the
+  `qits-eventstream-contracts` module, published as `eu.wohlben.qits:qits-eventstream-contracts`,
+  which a consuming service adds at `<scope>test</scope>`:
+
+  ```java
+  static final EventstreamPact PACT = EventstreamPact.forConsumer("qits-ci-service")
+      .listeners(new CiEventTriggerListener(), new ScmReleaseListener())  // every durable and raw listener
+      .publishes(true)                                                    // it publishes through QitsEventBus
+      .guard(Path.of("target/classes"));                                  // the default
+  @TestFactory Stream<DynamicTest> rows() { return PACT.tests(); }
+  @Test void pactFile() { PACT.compareOrWritePactFile(); }
+  ```
+
+  It writes `pacts/<service>_qits-eventstream-javalib_qits-events-service.json`. Its parts:
+  `contracts/EventstreamPact` (the rows, by feature — `PUBLISH`, `CATCH_UP_INITIALIZE`,
+  `CATCH_UP_PAGE` — selected by the service's real listeners and publish flag, plus the run and the
+  file gate), `contracts/EventsGoldenMasters` (the pact builder over qits-events' recordings),
+  `contracts/EventstreamVia` (the `qits-via` reference: this repository, `eu.wohlben.qits:qits-eventstream`
+  and the version on the classpath, read from the library jar's `pom.properties`),
+  `contracts/EventstreamGuard` (Jandex over the service's `target/classes`: every durable or raw
+  listener class must be passed, and any `QitsEventBus` user demands `publishes(true)`) and
+  `control/ContractProbe` — in the library's package, a split package on purpose, because
+  `EventsQuery` and `EventPage` are package-private. The kit's own suite runs every row of a sample
+  service (a named, an `ALL` and a replaying durable listener, a raw one, a publisher) against
+  pact-jvm's mock server and commits no pact file: one carrying the release version would change on
+  every release stamp.
 
 **THE EXTRACTION RULE, which outlived the extraction.** No `eu.wohlben.qits.*` package other than
 this one may appear in these sources, main or test. It was written inside qits-ci to keep lifting
@@ -379,7 +406,7 @@ both repos on a rename.
 
 ## The suite
 
-187 tests, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+188 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a

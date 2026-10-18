@@ -5,10 +5,11 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * The library's real REST clients, opened to the consumer pact (qits-1149). {@link EventsQuery} and
- * {@link EventPage} are package-private, so this test-only class sits in their package and hands
- * {@code contracts/EventsConsumerPactTest} the exact code {@link CatchupSweeper} and {@link
- * OutboxSweeper} run, pointed at a pact mock server. No CDI: the clients need only their url.
+ * The library's real REST clients, opened to the eventstream pact (qits-1149, qits-1163). {@link
+ * EventsQuery} and {@link EventPage} are package-private, so this class sits in their package — in
+ * the qits-eventstream-contracts jar, a split package on purpose, which is only ever on a test
+ * classpath — and hands {@code contracts/EventstreamPact} the exact code {@link CatchupSweeper} and
+ * {@link OutboxSweeper} run, pointed at a pact mock server. No CDI: the clients need only their url.
  */
 public final class ContractProbe {
 

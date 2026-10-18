@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- THE CONTRACTS KIT (qits-1163): what a consuming service adds at <scope>test</scope> to pact
+         the calls qits-eventstream makes to qits-events ON ITS BEHALF — the catch-up reads of each
+         of its durable listeners and the publish — as `pacts/<service>_qits-eventstream-javalib_
+         qits-events-service.json`. The library itself pacts nothing any more: a call a library makes
+         for a service is pacted by that service, against the library version it pins.
+
+         Everything below is COMPILE scope on purpose. A consumer takes this jar as a test
+         dependency, and Maven turns its compile dependencies into the consumer's test classpath, so
+         pact-jvm, JUnit, Jandex and qits-events' golden masters arrive with one <dependency>.
+         qits-eventstream itself is compile scope too, and a consumer's own direct pin of it wins
+         (nearest definition), so the kit runs the library version the service actually ships. -->
+    <parent>
+        <groupId>eu.wohlben.qits</groupId>
+        <artifactId>qits-eventstream-parent</artifactId>
+        <version>2026.1014.223716</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>qits-eventstream-contracts</artifactId>
+    <packaging>jar</packaging>
+    <name>qits-eventstream-contracts</name>
+
+    <dependencies>
+        <dependency>
+            <!-- The real EventsQuery / EventsPublisher the probe drives. Linked, not bundled, in
+                 the published pom (release.yml `link:`). -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-eventstream</artifactId>
+        </dependency>
+        <dependency>
+            <!-- pact-jvm's consumer half: PactBuilder, the mock server, the pact writer. -->
+            <groupId>au.com.dius.pact.consumer</groupId>
+            <artifactId>junit5</artifactId>
+        </dependency>
+        <dependency>
+            <!-- qits-events' recorded answers, read by EventsGoldenMasters. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-events-golden-masters</artifactId>
+        </dependency>
+        <dependency>
+            <!-- DynamicTest, Assertions, Assumptions: a pact row is a JUnit test. -->
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
+        <dependency>
+            <!-- The guard's index of the consumer's compiled classes. -->
+            <groupId>io.smallrye</groupId>
+            <artifactId>jandex</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <!-- The kit's own version, the fallback for qits-via (see EventstreamVia). Filtered,
+                     and under META-INF/maven/ on purpose: the platform's content hash skips that
+                     tree, so the version string does not make every release look changed. -->
+                <directory>src/main/resources-filtered</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+</project>

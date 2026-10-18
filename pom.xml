@@ -4,32 +4,43 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- The platform's event bus client: publish an event to qits-events, listen for events from
-         it. `QitsEvent`, `QitsEventBus`, `QitsEventListener`, `QitsRawEventListener` and
-         `CausationScope` are the whole public surface; the outbox, the canonical-JSON serializer
-         and the websocket subscriber are how they are kept.
+    <!-- The reactor of qits-eventstream: the event bus client and the contracts kit that pacts what
+         the client sends on a consuming service's behalf.
 
-         ONE MODULE AT THE ROOT — no `service/` split, because there is no deployable here. This
-         repo produces one jar and nothing else, so this pom is the parent and the module at once:
-         the versions a standalone build needs sit beside the dependencies they govern rather than
-         in a parent that would exist only to hold them.
+         TWO MODULES SINCE qits-1163. This used to be one module at the root, because the repository
+         produced one jar. It now produces two that are released together:
 
-         Those versions are duplicated out of the rest of the platform on purpose, for the reason
+           qits-eventstream/            eu.wohlben.qits:qits-eventstream            the library
+           qits-eventstream-contracts/  eu.wohlben.qits:qits-eventstream-contracts  test-scope kit
+
+         The library's coordinates did not change. This parent is NOT published (maven-library
+         archetype: the platform uploads flattened poms, so an internal parent is nobody's
+         dependency) and is not declared in .config/qits/release.yml. The release stamp rewrites
+         this pom's <version> and each module's <parent><version>; the inter-module dependency
+         spells ${project.version}, which follows by itself.
+
+         Versions are duplicated out of the rest of the platform on purpose, for the reason
          qits-ci's own pom gives: A CLONE OF THIS REPO ALONE MUST BUILD, with no monorepo, no
          parent to inherit from, and no prior `mvn install` anywhere. `./mvnw verify` is the gate,
          and the suite is self-contained enough to meet it — the stub qits-events is a JDK
-         `HttpServer` the tests start themselves, and the outbox runs on a postgres the suite spawns
-         itself from Maven artifacts (zonky), never a container.
+         `HttpServer` the tests start themselves, the outbox runs on a postgres the suite spawns
+         itself from Maven artifacts (zonky), never a container, and the contracts kit's pact tests
+         run against pact-jvm's own mock server.
 
-         Trimmed to what one library module actually needs. The monorepo's app-wide machinery is
+         Trimmed to what library modules actually need. The monorepo's app-wide machinery is
          intentionally absent (spotless, enforcer, surefire chunking, the build-cache extension),
          and so is `quarkus-maven-plugin`: nothing here is packaged as an application, and
          `quarkus-junit5` augments from the classpath at test time without it. -->
     <groupId>eu.wohlben.qits</groupId>
-    <artifactId>qits-eventstream</artifactId>
+    <artifactId>qits-eventstream-parent</artifactId>
     <version>2026.1014.223716</version>
-    <packaging>jar</packaging>
-    <name>qits-eventstream</name>
+    <packaging>pom</packaging>
+    <name>qits-eventstream-parent</name>
+
+    <modules>
+        <module>qits-eventstream</module>
+        <module>qits-eventstream-contracts</module>
+    </modules>
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
@@ -40,37 +51,37 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.34.6</quarkus.platform.version>
 
-        <!-- Embedded PostgreSQL for the suite. The outbox's store IS postgres now, so every test
-             that boots the persistence unit runs against one — and the first rule here is that a
-             clone tests green with NO DOCKER, which rules out Testcontainers and Quarkus dev
+        <!-- Embedded PostgreSQL for the library's suite. The outbox's store IS postgres, so every
+             test that boots the persistence unit runs against one — and the first rule here is that
+             a clone tests green with NO DOCKER, which rules out Testcontainers and Quarkus dev
              services alike. Zonky resolves real postgres binaries as ordinary Maven artifacts and
              spawns them as a child process: a dependency, not a container.
 
              Two coordinates, on purpose. The BOM pins which POSTGRES the binaries are (18.4.0 — the
              platform's own postgres tag), the library version is the harness around them, and they
-             move independently. Every architecture the suite may run on is named explicitly below:
-             the binaries are per-arch artifacts, and a missing one fails in the middle of a suite
-             rather than during resolution. -->
+             move independently. Every architecture the suite may run on is named explicitly in
+             qits-eventstream/pom.xml: the binaries are per-arch artifacts, and a missing one fails
+             in the middle of a suite rather than during resolution. -->
         <zonky.embedded-postgres.version>2.2.2</zonky.embedded-postgres.version>
         <zonky.postgres-binaries.version>18.4.0</zonky.postgres-binaries.version>
 
-        <!-- PatientPgDriver, which this jar's shipped datasource defaults NAME. That is what makes
+        <!-- PatientPgDriver, which the library's shipped datasource defaults NAME. That is what makes
              it a runtime dependency of the library rather than a line in each consumer's pom: a
              default naming a class every consumer must have is only a default if the jar brings the
              class along. Published by libs/qits-integrations-quarkus, which is why the
-             <repositories> block below exists — the one dependency here that is neither on Maven
-             Central nor part of the Quarkus platform. A clone still tests green with that
-             repository reachable, or offline once the jar is in ~/.m2. -->
+             <repositories> block below exists. A clone still tests green with that repository
+             reachable, or offline once the jar is in ~/.m2. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
         <!-- qits-http-core (qits-1198): QitsHttpClients wraps EventsPublisher's and EventsQuery's
              HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
-             instead of the receiver seeing a parentless SERVER span. Compile scope below, so a
-             consuming service's Quarkus module gets CallerServerFilter transitively too. -->
+             instead of the receiver seeing a parentless SERVER span. Compile scope in the library,
+             so a consuming service's Quarkus module gets CallerServerFilter transitively too. -->
         <qits.http-core.version>2026.1013.64811</qits.http-core.version>
-        <!-- The consumer pact with qits-events (qits-1149): pact-jvm's consumer half, on the version
-             every provider on the estate verifies with, and qits-events' recorded answers
+        <!-- The contracts kit (qits-1149, qits-1163): pact-jvm's consumer half, on the version every
+             provider on the estate verifies with, and qits-events' recorded answers
              (golden-masters/index.json + one JSON per state and operation), read by
-             contracts/EventsGoldenMasters. Both test scope. The recordings come from the same
+             EventsGoldenMasters. COMPILE scope in qits-eventstream-contracts, so a service that adds
+             the kit at test scope gets both transitively. The recordings come from the same
              platform repository as qits-db-core, so they add no new address. -->
         <pact.version>4.6.21</pact.version>
         <qits.events-golden-masters.version>2026.1010.121628</qits.events-golden-masters.version>
@@ -97,7 +108,7 @@
                 <!-- Which postgres the embedded binaries ARE — 18.4.0, the tag the platform's own
                      qits-oci-postgresql image is built from, so the suite proves the lineage
                      against the engine it ships on. Imported as a BOM because the per-arch
-                     artifacts below are separate coordinates. -->
+                     artifacts are separate coordinates. -->
                 <groupId>io.zonky.test.postgres</groupId>
                 <artifactId>embedded-postgres-binaries-bom</artifactId>
                 <version>${zonky.postgres-binaries.version}</version>
@@ -109,6 +120,21 @@
                 <artifactId>embedded-postgres</artifactId>
                 <version>${zonky.embedded-postgres.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>eu.wohlben.qits</groupId>
+                <artifactId>qits-eventstream</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>au.com.dius.pact.consumer</groupId>
+                <artifactId>junit5</artifactId>
+                <version>${pact.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.wohlben.qits</groupId>
+                <artifactId>qits-events-golden-masters</artifactId>
+                <version>${qits.events-golden-masters.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -123,200 +149,24 @@
         </repository>
     </repositories>
 
-    <dependencies>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
-        </dependency>
-        <dependency>
-            <!-- QitsHttpClients, for EventsPublisher and EventsQuery's HttpClients (qits-1198).
-                 Compile scope, so a consuming service's classpath carries CallerServerFilter too. -->
-            <groupId>${project.groupId}</groupId>
-            <artifactId>qits-http-core</artifactId>
-            <version>${qits.http-core.version}</version>
-        </dependency>
-        <dependency>
-            <!-- The outbox is a Panache entity in this module's OWN named persistence unit; see
-                 src/main/resources/META-INF/microprofile-config.properties. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-orm-panache</artifactId>
-        </dependency>
-        <dependency>
-            <!-- The outbox's store. It was a file H2 until the platform grew resource
-                 provisioning; the datasource is now the generic `QITS_RESOURCE_EVENTSTREAM_*`
-                 contract, and a consumer's deployment declares `postgresql:eventstream` to have it
-                 filled in. See src/main/resources/META-INF/microprofile-config.properties. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jdbc-postgresql</artifactId>
-        </dependency>
-        <dependency>
-            <!-- PatientPgDriver: the datasource defaults this jar ships name it, so every consumer
-                 needs the class on its runtime classpath and gets it here rather than by
-                 remembering a line. RUNTIME scope, not compile, and not optional: nothing in these
-                 sources imports it — config carries the name — and an optional dependency is one
-                 the consumer has to restate, which is the whole thing this avoids. It is also what
-                 keeps the extraction rule true: the class is never named in a source file here.
-                 See the datasource block in src/main/resources/META-INF/microprofile-config.properties. -->
-            <groupId>${project.groupId}</groupId>
-            <artifactId>qits-db-core</artifactId>
-            <version>${qits.db-core.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-flyway</artifactId>
-        </dependency>
-        <dependency>
-            <!-- Flyway 10 split its database support out of the core: without this module Flyway
-                 refuses a postgres url with "no database found to handle". It sits in this jar
-                 because this jar owns the lineage — a consumer that did not carry it would fail at
-                 boot on a migration it does not own. -->
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-        </dependency>
-        <dependency>
-            <!-- Jackson itself, NOT the CDI ObjectMapper. CanonicalJson builds its own mapper and
-                 configures every knob the wire contract depends on, because the canonical form is a
-                 thing another service compares byte-for-byte and must not be at the mercy of a
-                 consuming application's ObjectMapperCustomizers. The extension is here for the
-                 dependency and the native-image registrations, not for the bean. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jackson</artifactId>
-        </dependency>
-        <dependency>
-            <!-- The @Scheduled outbox sweeper. Taken because the retry schedule is the durability
-                 guarantee — a failed publish has to be retried with nothing else happening in the
-                 process, which is precisely what "sweep when something else comes along" cannot
-                 promise. Native-image supported, and it registers no reflection of ours: the
-                 scheduled method is a plain package-private method on an @ApplicationScoped bean. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-scheduler</artifactId>
-        </dependency>
-        <dependency>
-            <!-- The CLIENT half — BasicWebSocketConnector, dialling qits-events' /events/stream.
-                 The extension ships a server too and this module registers no @WebSocket, so the
-                 only cost is in what a consuming deployable already carries.
-
-                 It is the connector rather than vert.x-core's own WebSocketClient (which is what
-                 qits-ci-daemon uses, deliberately, to avoid linking an HTTP server into a 45MB
-                 static binary) because this jar is only ever consumed by a service that is already
-                 serving HTTP, and the connector's callback shape carries the reconnect logic with
-                 far less ceremony. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-websockets-next</artifactId>
-        </dependency>
-        <dependency>
-            <!-- The JAX-RS API and nothing more, for the two causation filters. The API jar is
-                 what lets them compile here and stay inert elsewhere: a consumer with quarkus-rest
-                 or quarkus-rest-client discovers them through the index, a consumer with neither
-                 never instantiates them. quarkus-rest itself must NOT sit here — a compile-scope
-                 extension would bolt an HTTP server onto every consumer, including the daemons
-                 that deliberately serve nothing. -->
-            <groupId>jakarta.ws.rs</groupId>
-            <artifactId>jakarta.ws.rs-api</artifactId>
-        </dependency>
-        <dependency>
-            <!-- The MicroProfile Health API and nothing more, for CatchupHealthCheck — the exact
-                 arrangement jakarta.ws.rs-api has above, for the exact same reason. The API jar is
-                 what lets the check compile here and stay INERT in a consumer without the
-                 extension: with nothing looking for @Readiness beans, ArC removes an unused bean
-                 and the class costs that consumer nothing but a jar on the classpath. A consumer
-                 that does carry quarkus-smallrye-health discovers it through this jar's jandex
-                 index and gets the check for free.
-
-                 quarkus-smallrye-health itself must NOT sit here at compile scope: an extension
-                 would bolt a /q/health endpoint and its whole HTTP wiring onto every consumer,
-                 including the daemons that deliberately serve nothing. -->
-            <groupId>org.eclipse.microprofile.health</groupId>
-            <artifactId>microprofile-health-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- The extension, test scope only: a check that compiles is not a check that is
-                 FOUND, and the only thing that proves discovery from this jar's jandex index is a
-                 real GET of /q/health/ready with `eventstream-catchup` in the body. Same shape as
-                 quarkus-rest below — API compile, extension test — because the failure being
-                 guarded against is the same one: a bean nobody looks for is a bean that says
-                 nothing about not having been looked for. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-smallrye-health</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- The far end the causation filters need under test: a real resource behind a real
-                 HTTP request, because the load-bearing assumption is a THREAD one — RESTEasy
-                 Reactive runs filters and a blocking resource method on the same worker — and only
-                 the wire can prove it. Test scope for the reason the API jar above is compile
-                 scope. -->
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-rest</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-rest-client</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- The consumer pact (qits-1149): contracts/EventsConsumerPactTest runs the real
-                 EventsQuery and EventsPublisher against a pact mock server. Test scope. -->
-            <groupId>au.com.dius.pact.consumer</groupId>
-            <artifactId>junit5</artifactId>
-            <version>${pact.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- qits-events' recorded answers. Test scope: recordings a test reads, never code. -->
-            <groupId>${project.groupId}</groupId>
-            <artifactId>qits-events-golden-masters</artifactId>
-            <version>${qits.events-golden-masters.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- The store every @QuarkusTest here boots against. Zonky spawns real postgres
-                 binaries as a child process — a maven dependency rather than a container — which
-                 is what keeps the clone-alone, docker-free rule true now that the outbox's store
-                 is postgres. EmbeddedPg + EmbeddedPgConfigSource hand the running instance to
-                 Quarkus. -->
-            <groupId>io.zonky.test</groupId>
-            <artifactId>embedded-postgres</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- Named per architecture on purpose: the binaries are separate artifacts and zonky
-                 picks one at run time, so an unnamed arch fails in the middle of a suite rather
-                 than during resolution. These three are what this platform is built and developed
-                 on. -->
-            <groupId>io.zonky.test.postgres</groupId>
-            <artifactId>embedded-postgres-binaries-linux-amd64</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.zonky.test.postgres</groupId>
-            <artifactId>embedded-postgres-binaries-linux-arm64v8</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- The musl build, for the platform's own CI: the step container is Alpine, where
-                 the glibc binaries above cannot start and the whole suite dies at the config
-                 source naming zonky. Found by the first post-receive verify of the postgres-based
-                 suite, 2026-08-10. -->
-            <groupId>io.zonky.test.postgres</groupId>
-            <artifactId>embedded-postgres-binaries-linux-amd64-alpine</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.zonky.test.postgres</groupId>
-            <artifactId>embedded-postgres-binaries-darwin-arm64v8</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>io.smallrye</groupId>
+                    <artifactId>jandex-maven-plugin</artifactId>
+                    <version>${jandex-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <id>make-index</id>
+                            <goals>
+                                <goal>jandex</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -328,28 +178,6 @@
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
-                <configuration>
-                    <systemPropertyVariables>
-                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-            <plugin>
-                <!-- The consuming Quarkus app needs an index of this jar's beans and entities —
-                     the outbox entity, the sweeper's @Scheduled method and the listener beans are
-                     all discovered from it. Without the index the jar is inert on a consumer's
-                     classpath and says nothing about why. -->
-                <groupId>io.smallrye</groupId>
-                <artifactId>jandex-maven-plugin</artifactId>
-                <version>${jandex-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <id>make-index</id>
-                        <goals>
-                            <goal>jandex</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>

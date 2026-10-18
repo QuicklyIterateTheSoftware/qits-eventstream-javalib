@@ -30,11 +30,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * <b>qits-events' recorded answers, as this library's consumer pact reads them</b> (qits-1149).
+ * <b>qits-events' recorded answers, as the eventstream pact reads them</b> (qits-1149, qits-1163):
+ * the golden-master pact builder behind {@link EventstreamPact}. Public so that a consuming service
+ * can read a recording it needs for an assertion of its own; the rows themselves come from {@link
+ * EventstreamPact}.
  *
  * <p>A minimal local copy of qits-maintenance-service's {@code GoldenMasters} (by way of
- * qits-configuration-service's events copy). Round 3 replaces it with the shared reader in
- * qits-integrations-quarkus-javalib. Three things differ from the maintenance copy:
+ * qits-configuration-service's events copy). Four things differ from the maintenance copy:
  *
  * <ul>
  *   <li><b>A request of the consumer's own.</b> The query (and the PUT body) is what this library
@@ -46,6 +48,8 @@ import java.util.regex.Pattern;
  *       status alone.
  *   <li><b>A variant in the description.</b> One trigger asks the same operation in several query
  *       shapes, so the description is {@code <trigger>: <operationId> (<variant>)}.
+ *   <li><b>A {@code qits-via} reference</b> beside {@code qits-call} and {@code qits-trigger}: the
+ *       consumer is the service, and the call is made through this library ({@link EventstreamVia}).
  * </ul>
  *
  * <p>qits-events publishes the tree as {@code eu.wohlben.qits:qits-events-golden-masters}, a
@@ -55,9 +59,6 @@ import java.util.regex.Pattern;
  * every other leaf a type match. An empty recorded array is compared as exactly empty.
  */
 public final class EventsGoldenMasters {
-
-  /** The consumer, as the pact names it: the repository name, never the bare application name. */
-  public static final String CONSUMER = "qits-eventstream-javalib";
 
   /** The provider, as the pact names it: the repository name, never the bare application name. */
   public static final String PROVIDER = "qits-events-service";
@@ -188,8 +189,9 @@ public final class EventsGoldenMasters {
   // --- the pact ---------------------------------------------------------------------------------
 
   /**
-   * What made this service make the call — the {@code qits-trigger} reference every interaction
-   * carries. One of four kinds, each naming the entry point by the key the kind uses:
+   * What made the consuming service make the call — the {@code qits-trigger} reference every
+   * interaction carries; {@code app} is the consuming service. One of four kinds, each naming the
+   * entry point by the key the kind uses:
    *
    * <ul>
    *   <li>{@code operation} — {@code operationId}, the consumer's own openapi operationId;
@@ -207,16 +209,16 @@ public final class EventsGoldenMasters {
       Objects.requireNonNull(value, "value");
     }
 
-    public static Trigger operation(String operationId) {
-      return new Trigger("operation", CONSUMER, "operationId", operationId);
+    public static Trigger operation(String app, String operationId) {
+      return new Trigger("operation", app, "operationId", operationId);
     }
 
-    public static Trigger event(String eventType) {
-      return new Trigger("event", CONSUMER, "event", eventType);
+    public static Trigger event(String app, String eventType) {
+      return new Trigger("event", app, "event", eventType);
     }
 
-    public static Trigger schedule(String schedule) {
-      return new Trigger("schedule", CONSUMER, "schedule", schedule);
+    public static Trigger schedule(String app, String schedule) {
+      return new Trigger("schedule", app, "schedule", schedule);
     }
 
     public static Trigger ui(String app, String interaction) {
@@ -245,9 +247,10 @@ public final class EventsGoldenMasters {
    * no provider-state generator, see {@link Operation#hasPathParams}); {@code query} — this
    * consumer's own; the status exact; the response body cut down to the {@code reads} fields of the
    * recording, with the matchers the class javadoc lists, or no body at all when {@code reads} is
-   * empty; and the per-interaction {@code comments.references} — {@code qits-call} and {@code
-   * qits-trigger}.
+   * empty; and the per-interaction {@code comments.references} — {@code qits-call}, {@code
+   * qits-trigger} and, when {@code via} is given, {@code qits-via}.
    *
+   * @param via the library the call is made through, or null for a call the consumer makes itself
    * @param body the request body this library sends, as JSON text, or null for none
    * @throws NullPointerException when {@code trigger} is null: an interaction nobody can attribute
    *     to an entry point is exactly what the references exist to prevent
@@ -257,6 +260,7 @@ public final class EventsGoldenMasters {
       String state,
       String operationId,
       Trigger trigger,
+      EventstreamVia via,
       String variant,
       Map<String, String> query,
       String body,
@@ -270,6 +274,9 @@ public final class EventsGoldenMasters {
     call.put("operationId", operationId);
     references.put("qits-call", call);
     references.put("qits-trigger", trigger.reference());
+    if (via != null) {
+      references.put("qits-via", via.reference());
+    }
     return builder.expectsToReceiveHttpInteraction(
         description(operationId, trigger, variant),
         http -> {
@@ -306,7 +313,7 @@ public final class EventsGoldenMasters {
   }
 
   /** The recorded body, cut down to the {@code reads} paths, with the index's matchers. */
-  static DslPart responseBody(Operation op, List<String> reads) {
+  public static DslPart responseBody(Operation op, List<String> reads) {
     JsonNode recorded = json(op.state(), op.operationId());
     if (!recorded.isObject()) {
       throw new IllegalStateException(
@@ -643,8 +650,8 @@ public final class EventsGoldenMasters {
     try (InputStream in = found) {
       if (in == null) {
         throw new IllegalStateException(
-            name + " is not on the test classpath — is eu.wohlben.qits:qits-events-golden-masters"
-                + " a test dependency of this module?");
+            name + " is not on the classpath — eu.wohlben.qits:qits-events-golden-masters arrives"
+                + " with eu.wohlben.qits:qits-eventstream-contracts; is something excluding it?");
       }
       return new String(in.readAllBytes(), StandardCharsets.UTF_8);
     } catch (IOException e) {

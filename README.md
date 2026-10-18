@@ -493,6 +493,49 @@ rate-limits itself to five-minutely as an outage lengthens.
 The known hole is named in `OutboxEvent`'s javadoc and deliberately left open: a crash between the
 inline attempt failing and the row committing loses the event.
 
+## Pacting what this library sends for you
+
+A call this library makes on a service's behalf — each durable listener's catch-up reads, and the
+publish — is pacted by **that service**, as consumer, against the library version it pins
+(qits-1163). The library pacts nothing itself; it ships the kit instead:
+
+    <dependency>
+        <groupId>eu.wohlben.qits</groupId>
+        <artifactId>qits-eventstream-contracts</artifactId>
+        <version><!-- the same version as qits-eventstream --></version>
+        <scope>test</scope>
+    </dependency>
+
+pact-jvm, JUnit, Jandex and qits-events' golden masters arrive with it. One plain JUnit class in the
+service (no `@QuarkusTest`):
+
+```java
+class EventstreamPactTest {
+  static final EventstreamPact PACT = EventstreamPact.forConsumer("qits-ci-service")
+      .listeners(new CiEventTriggerListener(), new ScmReleaseListener())  // every durable and raw listener
+      .publishes(true)                                                    // it publishes through QitsEventBus
+      .guard(Path.of("target/classes"));                                  // the default; one per module
+
+  @TestFactory Stream<DynamicTest> rows() { return PACT.tests(); }
+
+  @Test void theCommittedPactIsWhatTheRowsWrite() { PACT.compareOrWritePactFile(); }
+}
+```
+
+The rows are selected by those inputs, never copied whole: `PUBLISH` (a new id delivered, a reused
+id rejected) when the service publishes; per durable listener `CATCH_UP_INITIALIZE` (unless it
+replays from the epoch) and `CATCH_UP_PAGE`. Raw and typed listeners add no row — the websocket has
+no pact. Each row runs this library's real `EventsQuery` / `EventsPublisher` against a pact mock
+server. The file is `pacts/<service>_qits-eventstream-javalib_qits-events-service.json` in the
+service's repository root, compared byte for byte and rewritten with `-Dgolden.update=true` (or
+`QITS_GOLDEN_UPDATE=true`). Every interaction carries `qits-call`, `qits-trigger` (app: the service)
+and `qits-via` — this library's repository, artifact and the version on the service's classpath,
+so a library bump changes the file and wants a rewrite.
+
+**The guard** fails the file test, naming the class, when the service's compiled classes hold a
+durable or raw listener that was not passed, or a class using `QitsEventBus` while `publishes` is
+false. Pass each module's `target/classes` that holds them to `guard(...)`.
+
 ## Building
 
     ./mvnw verify
@@ -502,7 +545,9 @@ prior `mvn install` anywhere. That is the gate, and it is the reason this pom du
 instead of inheriting them. The suite starts its own stub qits-events on a Vert.x server and runs
 the two stores on a **real postgres it spawns itself** — zonky's binaries, resolved as ordinary Maven
 artifacts and started as a child process, never a container — so nothing is skipped for want of
-infrastructure. 187 tests, about twenty seconds.
+infrastructure. Two modules: `qits-eventstream/` (the jar, 188 tests, about twenty seconds) and
+`qits-eventstream-contracts/` (the kit above, whose own suite runs every row of a sample service
+against pact-jvm's mock server).
 
 `.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, but
 **the consumer owns the reflection registration** — read AGENTS.md's section on it before shipping a
