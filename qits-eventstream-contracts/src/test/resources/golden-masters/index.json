@@ -1,0 +1,21 @@
+{
+  "formatVersion": 1,
+  "provider": "qits-githost",
+  "states": [
+    {
+      "name": "a few recent events",
+      "slug": "a-few-recent-events",
+      "params": {},
+      "operations": [
+        {
+          "operationId": "listEvents",
+          "method": "GET",
+          "path": "/githost/api/elsewhere",
+          "status": 200,
+          "file": "a-few-recent-events/listEvents.json",
+          "frozen": {}
+        }
+      ]
+    }
+  ]
+}

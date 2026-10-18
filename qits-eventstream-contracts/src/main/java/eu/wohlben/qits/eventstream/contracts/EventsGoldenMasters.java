@@ -18,8 +18,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -80,7 +83,7 @@ public final class EventsGoldenMasters {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private static volatile JsonNode index;
+  private static volatile Tree tree;
 
   private EventsGoldenMasters() {}
 
@@ -174,7 +177,7 @@ public final class EventsGoldenMasters {
 
   /** The recorded JSON for one (state, operation), byte for byte as the jar carries it. */
   public static String body(String state, String operationId) {
-    return resource(ROOT + operation(state, operationId).file());
+    return tree().read(operation(state, operationId).file());
   }
 
   /** {@link #body}, parsed — a fresh tree each call, so a caller may edit it. */
@@ -596,30 +599,88 @@ public final class EventsGoldenMasters {
 
   // --- reading the jar --------------------------------------------------------------------------
 
-  private static JsonNode index() {
-    JsonNode loaded = index;
-    if (loaded == null) {
-      try {
-        loaded = MAPPER.readTree(resource(ROOT + "index.json"));
+  /**
+   * qits-events' tree: its parsed index and the URL base every recording is read relative to. A
+   * service's test classpath can carry several golden-master jars (githost's, maintenance's, ...),
+   * all at {@code golden-masters/index.json}, in whatever order its pom lists them; so every index
+   * is enumerated, the one whose provider is {@value #INDEX_PROVIDER} is chosen, and a recording is
+   * read from THAT jar, never through a plain {@code getResource} that answers with the first jar.
+   */
+  record Tree(JsonNode index, String base) {
+
+    String read(String file) {
+      try (InputStream in = URI.create(base + file).toURL().openStream()) {
+        return new String(in.readAllBytes(), StandardCharsets.UTF_8);
       } catch (IOException e) {
-        throw new UncheckedIOException(e);
+        throw new UncheckedIOException(
+            "qits-events' golden masters at " + base + " hold no " + file, e);
       }
-      if (loaded.path("formatVersion").asInt() != 1) {
-        throw new IllegalStateException(
-            "golden-masters/index.json is formatVersion " + loaded.path("formatVersion")
-                + "; GoldenMasters reads formatVersion 1");
-      }
-      if (!INDEX_PROVIDER.equals(loaded.path("provider").asText())) {
-        throw new IllegalStateException(
-            "golden-masters/index.json is "
-                + loaded.path("provider")
-                + "'s, not "
-                + INDEX_PROVIDER
-                + "'s");
-      }
-      index = loaded;
+    }
+  }
+
+  private static JsonNode index() {
+    return tree().index();
+  }
+
+  private static Tree tree() {
+    Tree loaded = tree;
+    if (loaded == null) {
+      loaded = select(indexes());
+      tree = loaded;
     }
     return loaded;
+  }
+
+  /** Every {@code golden-masters/index.json} this class's loader (else the context loader) sees. */
+  static List<URL> indexes() {
+    String name = ROOT + "index.json";
+    // This class's own loader first: a stub answering on its own threads may carry a different
+    // context loader, and the jar is on this class's classpath regardless.
+    List<URL> found = new ArrayList<>();
+    for (ClassLoader loader :
+        new ClassLoader[] {
+          EventsGoldenMasters.class.getClassLoader(), Thread.currentThread().getContextClassLoader()
+        }) {
+      if (loader == null || !found.isEmpty()) {
+        continue;
+      }
+      try {
+        Collections.list(loader.getResources(name)).forEach(found::add);
+      } catch (IOException e) {
+        throw new UncheckedIOException("listing " + name, e);
+      }
+    }
+    return found;
+  }
+
+  /** The tree among {@code candidates} whose index names {@value #INDEX_PROVIDER}; fails naming all. */
+  static Tree select(List<URL> candidates) {
+    List<String> seen = new ArrayList<>();
+    for (URL url : candidates) {
+      JsonNode candidate;
+      try (InputStream in = url.openStream()) {
+        candidate = MAPPER.readTree(in);
+      } catch (IOException e) {
+        throw new UncheckedIOException("reading " + url, e);
+      }
+      String provider = candidate.path("provider").asText(candidate.path("application").asText());
+      if (!INDEX_PROVIDER.equals(provider)) {
+        seen.add("'" + provider + "' at " + url);
+        continue;
+      }
+      if (candidate.path("formatVersion").asInt() != 1) {
+        throw new IllegalStateException(
+            url + " is formatVersion " + candidate.path("formatVersion")
+                + "; GoldenMasters reads formatVersion 1");
+      }
+      String spec = url.toString();
+      return new Tree(candidate, spec.substring(0, spec.length() - "index.json".length()));
+    }
+    throw new IllegalStateException(
+        "no golden-masters/index.json on the classpath is " + INDEX_PROVIDER + "'s"
+            + (seen.isEmpty() ? " (there is none at all)" : "; found " + seen)
+            + " — eu.wohlben.qits:qits-events-golden-masters arrives with"
+            + " eu.wohlben.qits:qits-eventstream-contracts; is something excluding it?");
   }
 
   private static JsonNode stateNode(String state) {
@@ -637,25 +698,5 @@ public final class EventsGoldenMasters {
       out.add(e.asText());
     }
     return Set.copyOf(out);
-  }
-
-  private static String resource(String name) {
-    // This class's own loader first: a stub answering on its own threads may carry a different
-    // context loader, and the jar is on this class's test classpath regardless.
-    ClassLoader loader = EventsGoldenMasters.class.getClassLoader();
-    InputStream found = loader == null ? null : loader.getResourceAsStream(name);
-    if (found == null && Thread.currentThread().getContextClassLoader() != null) {
-      found = Thread.currentThread().getContextClassLoader().getResourceAsStream(name);
-    }
-    try (InputStream in = found) {
-      if (in == null) {
-        throw new IllegalStateException(
-            name + " is not on the classpath — eu.wohlben.qits:qits-events-golden-masters arrives"
-                + " with eu.wohlben.qits:qits-eventstream-contracts; is something excluding it?");
-      }
-      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
   }
 }
