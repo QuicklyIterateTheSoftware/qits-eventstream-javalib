@@ -33,7 +33,7 @@
          `quarkus-junit5` augments from the classpath at test time without it. -->
     <groupId>eu.wohlben.qits</groupId>
     <artifactId>qits-eventstream-parent</artifactId>
-    <version>2026.1014.223716</version>
+    <version>2026.1018.151251</version>
     <packaging>pom</packaging>
     <name>qits-eventstream-parent</name>
 
