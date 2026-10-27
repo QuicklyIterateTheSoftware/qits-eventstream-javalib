@@ -127,6 +127,7 @@ class EventstreamPactTest {
 
   @Test
   void thePactFileIsWrittenOnUpdateAndComparedOtherwise(@TempDir Path pacts) throws IOException {
+    assumeCompareMode();
     Path file = pacts.resolve(PACT.file());
     System.setProperty(PactFiles.UPDATE_PROPERTY, "true");
     try {
@@ -160,6 +161,7 @@ class EventstreamPactTest {
   /** A row difference still fails, and leaves the committed file alone. */
   @Test
   void aRowDifferenceStillFails(@TempDir Path pacts) throws IOException {
+    assumeCompareMode();
     Path file = pacts.resolve(PACT.file());
     String current = PactFiles.normalise(PactFiles.written(PACT.pact()));
     String version = EventstreamVia.current().version();
@@ -172,6 +174,17 @@ class EventstreamPactTest {
     org.junit.jupiter.api.Assertions.assertThrows(
         AssertionError.class, () -> PACT.compareOrWritePactFile(pacts));
     assertEquals(changed, Files.readString(file), "a failing comparison rewrites nothing");
+  }
+
+  /**
+   * The golden-recordings automation runs every test with the update flag on, where nothing is
+   * compared, so a test that expects a comparison to fail can only run without it.
+   */
+  private static void assumeCompareMode() {
+    org.junit.jupiter.api.Assumptions.assumeFalse(
+        "true".equalsIgnoreCase(System.getenv(PactFiles.UPDATE_ENV))
+            || Boolean.getBoolean(PactFiles.UPDATE_PROPERTY),
+        "update mode: nothing is compared");
   }
 
   private static List<String> names(JsonNode node) {
