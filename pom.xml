@@ -13,6 +13,17 @@
            qits-eventstream/            eu.wohlben.qits:qits-eventstream            the library
            qits-eventstream-contracts/  eu.wohlben.qits:qits-eventstream-contracts  test-scope kit
 
+         Since qits-1770 the library is a Quarkus extension, which adds two more:
+
+           qits-eventstream-deployment/    eu.wohlben.qits:qits-eventstream-deployment    its build half
+           qits-eventstream-consumer-test/ (not published)                               a stand-in consumer
+
+         The deployment module records the consuming application's groupId:artifactId as the
+         default of qits.eventstream.publisher; the stand-in consumer is the only place that can be
+         tested, because a module's own @QuarkusTest never runs its own extension. Reactor order
+         matters: the runtime's extension plugin validates against the deployment module, and the
+         stand-in consumer's suite augments against it.
+
          The library's coordinates did not change. This parent is NOT published (maven-library
          archetype: the platform uploads flattened poms, so an internal parent is nobody's
          dependency) and is not declared in .config/qits/release.yml. The release stamp rewrites
@@ -39,6 +50,8 @@
 
     <modules>
         <module>qits-eventstream</module>
+        <module>qits-eventstream-deployment</module>
+        <module>qits-eventstream-consumer-test</module>
         <module>qits-eventstream-contracts</module>
     </modules>
 

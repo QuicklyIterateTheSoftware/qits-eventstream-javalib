@@ -24,6 +24,7 @@ erDiagram
     instant occurred_at "not null"
     string parent_id "length 36"
     text payload
+    string publisher "length 255"
     int refusals "not null"
     enum status "not null"
     instant updated_at "not null"

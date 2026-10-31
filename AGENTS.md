@@ -32,9 +32,24 @@ run loads config sources in more than one classloader, and the property is the o
 copies share. Testcontainers is not on this classpath and must not arrive; `quarkus.devservices.enabled=false`
 says the same thing about the other way a container gets started.
 
-**This is a library: a reactor of two jar modules and no `service/` split** (qits-1163). The root
+**This is a library: a reactor of jar modules and no `service/` split** (qits-1163). The root
 `pom.xml` is `qits-eventstream-parent` — versions, repository, plugin setup — and is never published
 (the platform uploads flattened poms). `qits-eventstream/` is the library, coordinates unchanged.
+
+**The library is a Quarkus extension since qits-1770**, for exactly one fact: the envelope's
+`publisher` defaults to the CONSUMING application's `groupId:artifactId`, which only augmentation
+knows. `qits-eventstream-deployment/` holds the one `@BuildStep` (`EventstreamProcessor`) that
+records it as a runtime default; `quarkus-extension-maven-plugin` in `qits-eventstream/` writes the
+descriptor naming it, and **refuses to build unless the deployment module depends on the
+`-deployment` artifact of every extension the runtime pulls in** — add one there whenever the
+runtime gains an extension. Published beside the library (release.yml), never named by a consumer.
+
+**A module's own `@QuarkusTest` never runs its own extension's build steps** — measured on this
+reactor: Quarkus' `ApplicationDependencyResolver` flags extensions among the application's
+DEPENDENCIES, and under `qits-eventstream/`'s suite the application is `qits-eventstream` itself,
+so `qits.eventstream.publisher` is simply absent there and the bus stamps null (hence an
+`Optional`, never a required `String`). The default is proved in `qits-eventstream-consumer-test/`,
+an unpublished stand-in consumer whose suite sees `eu.wohlben.qits:qits-eventstream-consumer-test`.
 `qits-eventstream-contracts/` is the test-scope contracts kit (below); release.yml `link:`s it to the
 library, so it is never bundled into the kit and the two publish together. The release stamp
 rewrites the root `<version>` and each module's `<parent><version>`; the kit's dependency on the
@@ -159,8 +174,8 @@ review. Its javadoc argues the widening.
   test, because it is the same lesson the mix-in taught.
 
   **The outbox's `parent_id` column is the load-bearing line of the whole feature.** qits-events
-  compares `name` + `occurredAt` + `payload` + `parentId` + `environment` — `description` stays
-  outside it — so a
+  compares `name` + `occurredAt` + `payload` + `parentId` + `environment` + `publisher` —
+  `description` stays outside it — so a
   sweeper that rebuilt the envelope without the parent would send a *different* request than the
   attempt it is retrying: a 400 against its own landed first attempt, or a caused event quietly
   republished as a chain root. The parent is fixed when the envelope is built and stored with it,
@@ -402,11 +417,13 @@ The same clause governs anything added to the envelope later. Add it to the serv
 add it here. `environment` — the tier stamped from `qits.environment`, `platform` where none is
 configured — was added under exactly this rule, and its property name is deliberately spelled as a
 literal here rather than imported from qits-integrations-quarkus-javalib (the extraction rule): grep
-both repos on a rename.
+both repos on a rename. `publisher` (qits-1770) followed it too: qits-events accepted and compared
+the field first, and the kit's `FRAME` binds `events[*].publisher` only against golden masters that
+record it.
 
 ## The suite
 
-188 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+194 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a

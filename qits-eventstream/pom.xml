@@ -214,6 +214,28 @@
                 </configuration>
             </plugin>
             <plugin>
+                <!-- THIS JAR IS A QUARKUS EXTENSION (qits-1770): the plugin writes
+                     META-INF/quarkus-extension.properties naming the deployment artifact, and
+                     Quarkus' bootstrap pulls ../qits-eventstream-deployment into every application
+                     that carries this jar. That module's one build step records the application's
+                     own groupId:artifactId as the default of qits.eventstream.publisher — a fact
+                     only augmentation has. The coordinates of THIS artifact did not change. -->
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-extension-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>extension-descriptor</goal>
+                        </goals>
+                        <configuration>
+                            <deployment>${project.groupId}:qits-eventstream-deployment:${project.version}</deployment>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <!-- The consuming Quarkus app needs an index of this jar's beans and entities —
                      the outbox entity, the sweeper's @Scheduled method and the listener beans are
                      all discovered from it. Without the index the jar is inert on a consumer's

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- THE BUILD HALF OF qits-eventstream (qits-1770). qits-eventstream is a Quarkus extension
+         since the envelope grew `publisher`: its default is the CONSUMING APPLICATION's Maven
+         groupId:artifactId, which no runtime config holds and a native image has no pom to read.
+         The one moment it is in hand is augmentation, so EventstreamProcessor reads it off the
+         application model there and records it as a runtime default for
+         qits.eventstream.publisher.
+
+         Nobody depends on this artifact by hand. The runtime jar's
+         META-INF/quarkus-extension.properties (written by quarkus-extension-maven-plugin in
+         ../qits-eventstream) names it, and Quarkus' bootstrap resolves it for every application
+         that carries qits-eventstream — which is why it is published beside the library
+         (.config/qits/release.yml).
+
+         The extension plugin insists that this module depend on the -deployment artifact of every
+         Quarkus extension the runtime module depends on; the list below is that rule, not a
+         choice. Add a line here whenever ../qits-eventstream gains an extension. -->
+    <parent>
+        <groupId>eu.wohlben.qits</groupId>
+        <artifactId>qits-eventstream-parent</artifactId>
+        <version>2026.1027.101950</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>qits-eventstream-deployment</artifactId>
+    <packaging>jar</packaging>
+    <name>qits-eventstream-deployment</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-eventstream</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <!-- For qits-http-core's quarkus-vertx-http, which the runtime carries transitively. -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-vertx-http-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-orm-panache-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jackson-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-scheduler-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-websockets-next-deployment</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- Generates META-INF/quarkus-build-steps.list, without which Quarkus never finds
+                     EventstreamProcessor. Named explicitly: from JDK 23 on, javac no longer runs
+                     processors it merely finds on the classpath. -->
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.platform.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

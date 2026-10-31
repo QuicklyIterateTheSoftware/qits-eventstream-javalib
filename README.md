@@ -20,7 +20,9 @@ old spelling, because they are documents that were written rather than code that
     </dependency>
 
 Quarkus, JDK 25. A consumer needs no other wiring: the jar carries its own beans index, its own
-config defaults and its own database.
+config defaults and its own database. It is a **Quarkus extension** (qits-1770): Quarkus resolves
+its build half, `eu.wohlben.qits:qits-eventstream-deployment`, from the jar's own descriptor, so a
+consumer never names that artifact — it only has to be reachable in the same Maven repository.
 
 ## The whole public surface
 
@@ -369,8 +371,17 @@ application (250) and the environment (300) override any of it. A library jar's 
 | `qits.eventstream.catchup-at-startup` | `true` | also sweep once at boot — the cutover cure. On its own thread, so it never delays a start. A test suite turns it off. |
 | `qits.eventstream.sweep-stall-budget` | `PT5M` | how long one sweep may hold the catch-up lock before the watchdog names it in an ERROR, interrupts its thread and puts the `eventstream-catchup` readiness check DOWN. Generous on purpose: a long sweep draining a real backlog is normal, and only "no honest sweep runs this long" is the fault. |
 | `qits.eventstream.prune-horizon` | `P1D` | how far below the watermark a handled-event claim is kept. Pure overlap; generous because the comparison mixes two clocks. |
+| `qits.eventstream.publisher` | the application's `groupId:artifactId` | the `publisher` stamped on every envelope. **Not** in the properties file: the default is recorded at build time (below). |
 
-The last four do nothing at all in an application with no durable listener.
+The four before it do nothing at all in an application with no durable listener.
+
+**`qits.eventstream.publisher` defaults to the consuming application's own Maven coordinates**
+(`eu.wohlben.qits:qits-ci-service`), which no runtime config holds and a native image has no pom to
+read. The extension's build step reads them off the application model during augmentation and
+records them as a runtime default, at SmallRye's lowest ordinal — so it is the same in JVM mode, in
+a native image and under `@QuarkusTest`, and anything real overrides it: the application property,
+or `QITS_EVENTSTREAM_PUBLISHER` in the deployment. A value in this jar's own properties file would
+shadow the default for every consumer at once, which is why there is none.
 
 The default `qits.events.url` is the qits-net alias, which is right for any deployment on that
 network and wrong for a host-run process — a stack that publishes qits-events on a mapped localhost
@@ -436,12 +447,13 @@ The `PUT` body, and — plus the row's id — what comes back out of the stream:
 ```json
 {"description":null,"environment":"dev","name":"BuildSuccessful",
  "occurredAt":"2026-07-31T12:46:03Z","parentId":"6c3f2b1a-…",
- "payload":"{\"repoId\":\"…\",\"runId\":\"…\"}"}
+ "payload":"{\"repoId\":\"…\",\"runId\":\"…\"}","publisher":"eu.wohlben.qits:qits-ci-service"}
 ```
 
 `payload` is the event's own fields as a canonical JSON **string** — a string, not a nested object,
 because the server stores and compares it verbatim and never has to parse it. Everything `QitsEvent`
-declares is excluded from it: identity, causation and the environment travel in the envelope.
+declares is excluded from it: identity, causation, the environment and the publisher travel in the
+envelope.
 
 `environment` is the tier this process publishes from: `qits.environment` — the MicroProfile
 spelling of the `QITS_ENVIRONMENT` the deployer injects into every environment-tier service — or
@@ -450,9 +462,17 @@ definition of itself. Resolved by `QitsEventBus` at the same single point the ca
 the outbox row for the same reason the parent is (the server compares it, so a sweep must resend
 what the inline attempt sent), and never a `QitsEvent` method.
 
+`publisher` is the service that dispatched the event (qits-1770): `qits.eventstream.publisher`,
+which defaults to the application's `groupId:artifactId` (see Configuration) and is overridden by
+the application property or `QITS_EVENTSTREAM_PUBLISHER`. Stamped at the same single point,
+stored on the outbox row (`publisher`, V5) and resent from there — a sweep never re-reads it, so a
+reconfiguration between the attempt and the retry cannot turn the retry into a different request.
+On the way in, `EventFrame.publisher()` carries it, null from an older qits-events or for an
+event published before the field existed.
+
 **Canonical means the string is a function of the value and of nothing else.** Keys sorted, no
 insignificant whitespace, absent fields omitted rather than written as explicit nulls. qits-events
-compares `name` + `occurredAt` + `payload` + `parentId` + `environment` byte-for-byte to tell an idempotent replay
+compares `name` + `occurredAt` + `payload` + `parentId` + `environment` + `publisher` byte-for-byte to tell an idempotent replay
 (200) from a reused UUID (400), so two serializations of one event that differ by a space are, to
 the far end, a contradiction. `CanonicalJson` therefore builds its **own** `ObjectMapper` and sets
 every knob explicitly. Read AGENTS.md before touching any of it.
@@ -549,9 +569,13 @@ prior `mvn install` anywhere. That is the gate, and it is the reason this pom du
 instead of inheriting them. The suite starts its own stub qits-events on a Vert.x server and runs
 the two stores on a **real postgres it spawns itself** — zonky's binaries, resolved as ordinary Maven
 artifacts and started as a child process, never a container — so nothing is skipped for want of
-infrastructure. Two modules: `qits-eventstream/` (the jar, 188 tests, about twenty seconds) and
-`qits-eventstream-contracts/` (the kit above, whose own suite runs every row of a sample service
-against pact-jvm's mock server).
+infrastructure. Four modules: `qits-eventstream/` (the jar and its suite),
+`qits-eventstream-deployment/` (the extension's build half: one build step, no tests of its own),
+`qits-eventstream-consumer-test/` (an unpublished stand-in consumer — the only place the build step
+can be proved, since Quarkus never runs a module's OWN extension descriptor under its own
+`@QuarkusTest`) and `qits-eventstream-contracts/` (the kit above, whose own suite runs every row of a
+sample service against pact-jvm's mock server). Build the reactor, not a single module: the
+extension plugin in `qits-eventstream/` validates against the deployment module.
 
 `.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, but
 **the consumer owns the reflection registration** — read AGENTS.md's section on it before shipping a

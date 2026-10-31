@@ -119,13 +119,15 @@ class CanonicalJsonTest {
     // SORT_PROPERTIES_ALPHABETICALLY is what makes a new envelope field free of an ordering
     // decision.
     assertEquals(
-        List.of("description", "environment", "name", "occurredAt", "parentId", "payload"),
+        List.of(
+            "description", "environment", "name", "occurredAt", "parentId", "payload", "publisher"),
         fieldNames(parsed));
     assertTrue(parsed.get("description").isNull(), json);
     // @JsonInclude(ALWAYS) is on the TYPE, so each new component inherited the exception to the
     // omit-nulls rule: absent means an explicit null on the wire, never a missing key.
     assertTrue(parsed.get("parentId").isNull(), json);
     assertTrue(parsed.get("environment").isNull(), json);
+    assertTrue(parsed.get("publisher").isNull(), json);
     assertEquals("ThingHappened", parsed.get("name").asText());
     assertEquals("2026-07-31T12:46:03Z", parsed.get("occurredAt").asText());
     // payload is a STRING holding JSON, not a nested object — the server never parses it.
@@ -159,6 +161,22 @@ class CanonicalJsonTest {
     // rests on, and it is why the rollout order is qits-events first.
     assertNull(frame.parentId());
     assertNull(frame.environment());
+    assertNull(frame.publisher());
+  }
+
+  @Test
+  void aFrameCarryingAPublisherReadsItBack() {
+    String text =
+        """
+        {"id":"%s","name":"ThingHappened","occurredAt":"2026-07-31T12:46:03Z",\
+        "payload":"{\\"what\\":\\"shipped\\"}","description":null,"parentId":null,\
+        "environment":"dev","publisher":"eu.wohlben.qits:qits-ci-service"}
+        """
+            .formatted(UUID.randomUUID());
+
+    EventFrame frame = CanonicalJson.frame(text);
+    assertEquals("eu.wohlben.qits:qits-ci-service", frame.publisher());
+    assertEquals("dev", frame.environment());
   }
 
   @Test

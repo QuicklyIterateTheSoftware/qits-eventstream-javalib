@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- A STAND-IN CONSUMER, and nothing else (qits-1770). Never published: it is not in
+         .config/qits/release.yml, and install/deploy are skipped below.
+
+         It exists because the one behaviour qits-eventstream-deployment adds cannot be proved in
+         ../qits-eventstream's own suite. Quarkus loads a deployment module for an extension that
+         is a DEPENDENCY of the application; under a module's own @QuarkusTest the application is
+         that module, and its own META-INF/quarkus-extension.properties is never read. So the
+         build step that records qits.eventstream.publisher's default — the application's
+         groupId:artifactId — runs for every real consumer and never for the library's own tests.
+         Here the library is a plain dependency, exactly as in qits-ci-service, and the stamped
+         publisher must come out as this module's coordinates:
+         eu.wohlben.qits:qits-eventstream-consumer-test.
+
+         Surefire, like the rest of the reactor, and no docker: the outbox's store is zonky's
+         embedded postgres (EmbeddedStore), exactly as in ../qits-eventstream. -->
+    <parent>
+        <groupId>eu.wohlben.qits</groupId>
+        <artifactId>qits-eventstream-parent</artifactId>
+        <version>2026.1027.101950</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>qits-eventstream-consumer-test</artifactId>
+    <packaging>jar</packaging>
+    <name>qits-eventstream-consumer-test</name>
+
+    <properties>
+        <maven.install.skip>true</maven.install.skip>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-eventstream</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Not a dependency a consumer writes: Quarkus finds the deployment artifact through
+                 the runtime jar's descriptor. Declared here only so the reactor builds it BEFORE
+                 this module's tests augment against it. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-eventstream-deployment</artifactId>
+            <version>${project.version}</version>
+            <type>pom</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Every architecture ../qits-eventstream names, for its reason: the binaries are
+                 per-arch artifacts and a missing one fails mid-suite, not at resolution. -->
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-linux-amd64</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-linux-arm64v8</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-linux-amd64-alpine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-darwin-arm64v8</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

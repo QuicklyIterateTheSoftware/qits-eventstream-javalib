@@ -140,7 +140,8 @@ public final class EventstreamPact {
 
   /**
    * Every frame field the library binds ({@code EventFrame}) but {@code environment}, which the
-   * state {@value #A_FEW_RECENT_EVENTS} records as null.
+   * state {@value #A_FEW_RECENT_EVENTS} records as null. {@code publisher} (qits-1770) is bound by
+   * type: qits-events' provider states stamp a non-null one on every seeded event.
    */
   static final List<String> FRAME =
       List.of(
@@ -149,14 +150,19 @@ public final class EventstreamPact {
           "events[*].occurredAt",
           "events[*].payload",
           "events[*].description",
-          "events[*].parentId");
+          "events[*].parentId",
+          "events[*].publisher");
 
   /** An empty page: the whole (empty) list is what the library reads. */
   static final List<String> PAGE = List.of("events");
 
   /**
    * The envelope every publish row sends. Its content must differ from whatever the state {@value
-   * #AN_EVENT_WITH_THE_ID} stores at the id, which is what makes the 400.
+   * #AN_EVENT_WITH_THE_ID} stores at the id, which is what makes the 400. It carries a non-null
+   * {@code publisher} (qits-1770), because {@code QitsEventBus} always stamps one in a real
+   * consumer — the build-time default is the application's own {@code groupId:artifactId} — so the
+   * pact sends what a service sends. The value is the kit's, not the consumer's: one fixed body
+   * keeps every service's pact row identical and its provider verification independent of names.
    */
   static final EventEnvelope ENVELOPE =
       new EventEnvelope(
@@ -165,7 +171,8 @@ public final class EventstreamPact {
           "{\"application\":\"qits-eventstream-pact\"}",
           null,
           null,
-          null);
+          null,
+          "eu.wohlben.qits:qits-eventstream-pact");
 
   private final String consumer;
   private final List<Object> listeners;
@@ -454,6 +461,7 @@ public final class EventstreamPact {
       assertNotNull(frame.name(), "name");
       assertNotNull(frame.occurredAt(), "occurredAt");
       assertNotNull(frame.payload(), "payload");
+      assertNotNull(frame.publisher(), "publisher");
     }
     assertNull(page.nextCursor(), "the recording fits one page");
   }

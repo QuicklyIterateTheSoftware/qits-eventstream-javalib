@@ -69,11 +69,13 @@ public class OutboxSweeper {
     int unreachable = 0;
     String silence = null;
     for (OutboxEvent row : due) {
-      // Rebuilt from the stored columns and from nothing else — including parent_id and
-      // environment, both of which the server compares. A parent re-read from the ambient context
+      // Rebuilt from the stored columns and from nothing else — including parent_id, environment
+      // and publisher, all of which the server compares. A parent re-read from the ambient context
       // here would be whatever the SCHEDULER's thread happens to hold, which is never the right
       // answer and is usually null; a tier re-read from config would be whatever the process was
-      // reconfigured to since, which is a different request than the one being retried.
+      // reconfigured to since, which is a different request than the one being retried. The same
+      // goes for a publisher re-read from config after an override was added or an upgrade moved
+      // the default.
       EventsPublisher.Delivery attempt =
           publisher.put(
               row.id,
@@ -83,7 +85,8 @@ public class OutboxSweeper {
                   row.payload,
                   row.description,
                   row.parentId,
-                  row.environment));
+                  row.environment,
+                  row.publisher));
       if (attempt.delivered()) {
         outbox.delivered(row.id);
       } else {
