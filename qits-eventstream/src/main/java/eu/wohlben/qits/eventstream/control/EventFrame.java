@@ -31,6 +31,14 @@ import java.time.Instant;
  * appended last under the same rule as the parent was, and null when the frame came from an older
  * qits-events or an event that predates the field. This module attaches no behaviour to it —
  * dispatch filters by signature, not tier — it is data a listener may read.
+ *
+ * <p>{@code publisher} is the service that dispatched the event (qits-1770), conventionally its
+ * Maven {@code groupId:artifactId}; appended last under the same rule, null from an older
+ * qits-events or for an event published before the field existed, and equally behaviour-free here.
+ *
+ * <p>The seven-component constructor is kept, delegating with a null publisher, because consuming
+ * suites build frames by hand by the hundred — the record's canonical shape grew, and a test that
+ * only knew the old one must keep compiling. Jackson binds the canonical (eight-component) one.
  */
 @io.quarkus.runtime.annotations.RegisterForReflection
 public record EventFrame(
@@ -40,4 +48,18 @@ public record EventFrame(
     String payload,
     String description,
     String parentId,
-    String environment) {}
+    String environment,
+    String publisher) {
+
+  /** A frame without a publisher — the shape before qits-1770, kept for hand-built frames. */
+  public EventFrame(
+      String id,
+      String name,
+      Instant occurredAt,
+      String payload,
+      String description,
+      String parentId,
+      String environment) {
+    this(id, name, occurredAt, payload, description, parentId, environment, null);
+  }
+}

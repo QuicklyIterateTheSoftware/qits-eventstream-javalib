@@ -80,6 +80,18 @@ public class OutboxEvent extends PanacheEntityBase {
   @Column(length = 64)
   public String environment;
 
+  /**
+   * The envelope's {@code publisher} — the service the publish was stamped from ({@code
+   * qits.eventstream.publisher}, by default the application's Maven {@code groupId:artifactId}), or
+   * null for a row written before the field existed (qits-1770).
+   *
+   * <p>Stored for {@link #environment}'s exact reason: qits-events compares it, and an override
+   * added or a default moved between the inline attempt and the sweep would otherwise send a
+   * different request than the one being retried. 255 is qits-events' own bound on the field.
+   */
+  @Column(length = 255)
+  public String publisher;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   public OutboxStatus status;

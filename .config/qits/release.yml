@@ -8,6 +8,12 @@ archetype: maven-library
 # is pacted by that service, as `pacts/<service>_qits-eventstream-javalib_qits-events-service.json`,
 # built with eu.wohlben.qits:qits-eventstream-contracts. No golden masters either: this library
 # serves no REST API.
+#
+# THE LIBRARY IS A QUARKUS EXTENSION (qits-1770), so its build half publishes beside it: the runtime
+# jar's descriptor names eu.wohlben.qits:qits-eventstream-deployment at the same version and every
+# consuming application's build resolves it from here. It LINKS the library, like the kit. The
+# stand-in consumer, qits-eventstream-consumer-test, is a test module and is not declared.
 artifacts:
   - { type: maven, name: "eu.wohlben.qits:qits-eventstream", path: qits-eventstream, sbom: qits-eventstream/target/sbom.json }
+  - { type: maven, name: "eu.wohlben.qits:qits-eventstream-deployment", path: qits-eventstream-deployment, sbom: qits-eventstream-deployment/target/sbom.json, link: [qits-eventstream] }
   - { type: maven, name: "eu.wohlben.qits:qits-eventstream-contracts", path: qits-eventstream-contracts, sbom: qits-eventstream-contracts/target/sbom.json, link: [qits-eventstream] }

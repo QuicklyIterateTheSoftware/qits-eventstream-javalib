@@ -12,7 +12,8 @@ import java.util.UUID;
  *
  * <pre>{@code
  * {"description":null,"environment":"dev","name":"BuildSuccessful",
- *  "occurredAt":"2026-07-31T12:46:03Z","parentId":"6c3f2b1a-…","payload":"{…}"}
+ *  "occurredAt":"2026-07-31T12:46:03Z","parentId":"6c3f2b1a-…","payload":"{…}",
+ *  "publisher":"eu.wohlben.qits:qits-ci-service"}
  * }</pre>
  *
  * <p>{@code name} doubles as the signature; {@code payload} is the event's fields as a canonical
@@ -39,8 +40,8 @@ import java.util.UUID;
  * needed no change at all — there is nothing new to hide.
  *
  * <p>It <em>does</em> participate in the server's idempotency comparison ({@code name} + {@code
- * occurredAt} + {@code payload} + {@code parentId} + {@code environment}; {@code description} stays
- * outside). That is why the outbox stores both values rather than re-deriving them: a retry rebuilt
+ * occurredAt} + {@code payload} + {@code parentId} + {@code environment} + {@code publisher}; {@code
+ * description} stays outside). That is why the outbox stores all three rather than re-deriving them: a retry rebuilt
  * without the parent would either 400 against its own landed first attempt or land as a root, and
  * one rebuilt under a different tier — a process reconfigured between the attempt and the sweep —
  * would 400 the same way.
@@ -49,6 +50,14 @@ import java.util.UUID;
  * process-ambient configuration, not a fact any event class declares, so it enters here — resolved
  * by {@code QitsEventBus} from {@code qits.environment} — and {@link CanonicalJson} and its mix-in
  * again needed no change: a payload is byte-identical whatever tier it was published from.
+ *
+ * <p><b>{@code publisher} is the service that dispatched the event</b> (qits-1770), conventionally
+ * its Maven {@code groupId:artifactId} ({@code eu.wohlben.qits:qits-ci-service}). Envelope for the
+ * environment's reason — it is a fact about the process, not about the event — and appended last.
+ * {@code QitsEventBus} stamps it from {@code qits.eventstream.publisher}, whose default this
+ * library's deployment module computes at build time from the consuming application's own Maven
+ * coordinates. qits-events compares it too (one id dispatched by two services is two claims about
+ * history), which is why the outbox stores it and the sweeper resends the stored value.
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record EventEnvelope(
@@ -57,7 +66,8 @@ public record EventEnvelope(
     String payload,
     String description,
     String parentId,
-    String environment) {
+    String environment,
+    String publisher) {
 
   /** The envelope for an event with no cause — the root case, spelled without an argument. */
   public static EventEnvelope of(QitsEvent event) {
@@ -84,12 +94,25 @@ public record EventEnvelope(
    *     that resolves no tier at all
    */
   public static EventEnvelope of(QitsEvent event, UUID parentEventId, String environment) {
+    return of(event, parentEventId, environment, null);
+  }
+
+  /**
+   * {@link #of(QitsEvent, UUID, String)} plus the dispatching service — the full stamp {@code
+   * QitsEventBus} builds.
+   *
+   * @param publisher the resolved {@code qits.eventstream.publisher} — by default the publishing
+   *     application's {@code groupId:artifactId} — or null from a caller that resolves none
+   */
+  public static EventEnvelope of(
+      QitsEvent event, UUID parentEventId, String environment, String publisher) {
     return new EventEnvelope(
         event.name(),
         event.occurredAt(),
         CanonicalJson.payload(event),
         null,
         parentEventId == null ? null : parentEventId.toString(),
-        environment);
+        environment,
+        publisher);
   }
 }

@@ -67,6 +67,8 @@ class OutboxFlowTest extends EventstreamTestSupport {
     assertEquals(event.eventId().toString(), put.id());
     // "platform" is the bus's tier fallback where no qits.environment is configured — this suite's
     // arrangement, and a platform-tier deployment's. The configured path is EnvironmentStampingTest.
+    // No publisher: this suite's application is this module itself, which Quarkus does not run as
+    // an extension, so no build step records the default here (PublisherStampingTest).
     assertEquals(CanonicalJson.envelope(EventEnvelope.of(event, null, "platform")), put.body());
   }
 

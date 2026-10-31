@@ -60,6 +60,14 @@ import org.jboss.logging.Logger;
  * here rather than imported from qits-integrations-quarkus' {@code EnvironmentHeader}: the
  * extraction rule admits no foreign {@code eu.wohlben.qits.*} import, so the string is the shared
  * contract — grep both repos on a rename.
+ *
+ * <p><b>And so does the publisher</b> (qits-1770): the service that dispatched the event, {@code
+ * qits.eventstream.publisher}. Its default is computed at BUILD time by this library's deployment
+ * module ({@code qits-eventstream-deployment}) from the consuming application's own Maven {@code
+ * groupId:artifactId} — the one place that knows it, and the only way the answer is the same in
+ * JVM mode, in a native image and under {@code @QuarkusTest}. An application property or {@code
+ * QITS_EVENTSTREAM_PUBLISHER} overrides it. Resolved at the same single point as the tier, so the
+ * outbox row stores it and a sweep resends what the inline attempt sent.
  */
 @ApplicationScoped
 public class QitsEventBus {
@@ -80,6 +88,14 @@ public class QitsEventBus {
    */
   @ConfigProperty(name = "qits.environment")
   Optional<String> environment;
+
+  /**
+   * The service that dispatches this process's events — by default the application's Maven {@code
+   * groupId:artifactId}, recorded by the deployment module's build step; absent only where no
+   * Quarkus build of this extension ran at all, which stamps null. See the class javadoc.
+   */
+  @ConfigProperty(name = "qits.eventstream.publisher")
+  Optional<String> publisherName;
 
   /**
    * Announce that something happened. Returns as soon as the event is either delivered or owned.
@@ -121,7 +137,9 @@ public class QitsEventBus {
     String eventId = event.eventId().toString();
     try {
       UUID parent = parentEventId != null ? parentEventId : CausationScope.current();
-      EventEnvelope envelope = EventEnvelope.of(event, parent, environment.orElse("platform"));
+      EventEnvelope envelope =
+          EventEnvelope.of(
+              event, parent, environment.orElse("platform"), publisherName.orElse(null));
       EventsPublisher.Delivery attempt = publisher.put(eventId, envelope);
       if (attempt.delivered()) {
         return;
