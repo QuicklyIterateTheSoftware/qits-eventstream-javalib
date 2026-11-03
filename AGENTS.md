@@ -142,6 +142,13 @@ review. Its javadoc argues the widening.
   than a log, and the log is qits-events. The known hole — a crash between the inline attempt
   failing and the row committing — is named in `OutboxEvent`'s javadoc and deliberately left open.
 
+  **The inline attempt has its own, short switchover budget** (qits-428):
+  `qits.eventstream.publish-retry-budget`, 5s, against qits-http-core's 30s. `EventsPublisher`
+  wraps ONE raw client twice — `put` (the outbox's resend) under the full policy, `putInline` (the
+  bus) under the same policy with the budget cut — so the two paths still send the identical
+  request. Do not give the bus `put`: thirty seconds on the caller's thread is exactly the block
+  `publish` promises not to be, and the outbox is already the durable path.
+
   **The retry budget bounds REFUSALS, and nothing bounds an unreachable bus.** `EventsPublisher`
   answers with four outcomes, not three: delivered, rejected (the 400), refused (a response arrived
   and said no) and unreachable (no response at all). Only refusals draw on
@@ -423,7 +430,7 @@ record it.
 
 ## The suite
 
-199 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+201 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a
@@ -471,7 +478,8 @@ a mock of `EventsPublisher`, which would stop the wire being under test.
 `CuttableProxy` (with `ProxiedEventsServer`, the resource that puts it in front of the stub) is the
 edge: plain TCP, `SO_LINGER 0`, so `refuse()` resets every connection on both legs and closes the
 listener, `accept()` binds the same port again, and `swallowNext(n)` resets connections after the
-request went out. `EdgeSwitchoverTest` drives it. A test aimed at a closed port stays on loopback,
+request went out. `EdgeSwitchoverTest` drives it, and installs a hand-built `EventsPublisher` with
+`QuarkusMock` where the bus itself has to retry against it. A test aimed at a closed port stays on loopback,
 which qits-http-core's retry policy never retries — the proxy cases opt in with
 `RetryPolicy.standard().withLoopbackRetries()` on a hand-built client.
 

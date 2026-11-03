@@ -6,13 +6,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import eu.wohlben.qits.eventstream.QitsEventBus;
 import eu.wohlben.qits.eventstream.control.TestEvents.RecordingDurableListener;
 import eu.wohlben.qits.eventstream.control.TestEvents.ThingHappened;
 import eu.wohlben.qits.eventstream.control.TestEvents.ThingListener;
+import eu.wohlben.qits.eventstream.entity.OutboxEvent;
+import eu.wohlben.qits.eventstream.entity.OutboxStatus;
 import eu.wohlben.qits.http.QitsHttpClients;
 import eu.wohlben.qits.http.RetryPolicy;
 import io.opentelemetry.api.OpenTelemetry;
 import io.quarkus.test.common.WithTestResource;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -58,6 +62,9 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   @Inject EventsQuery query;
   @Inject RecordingDurableListener durable;
   @Inject ThingListener things;
+  @Inject QitsEventBus bus;
+  @Inject OutboxSweeper outboxSweeper;
+  @Inject EventsPublisher publisher;
 
   private CuttableProxy edge;
 
@@ -172,7 +179,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
    */
   @Test
   void aPublishResetBeforeItsResponseIsSentAgain() {
-    EventsPublisher patient = new EventsPublisher(retryingClients());
+    EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(5));
     patient.eventsUrl = ProxiedEventsServer.url();
     patient.publishTimeout = Duration.ofSeconds(5);
     ThingHappened event = new ThingHappened(null, "p-1", 1, T0);
@@ -189,7 +196,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   /** A publish against a refusing edge — nothing was sent — is retried until the edge is back. */
   @Test
   void aPublishRidesOutARefusingEdge() {
-    EventsPublisher patient = new EventsPublisher(retryingClients());
+    EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(5));
     patient.eventsUrl = ProxiedEventsServer.url();
     patient.publishTimeout = Duration.ofSeconds(5);
     ThingHappened event = new ThingHappened(null, "p-2", 1, T0);
@@ -200,6 +207,54 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
 
     assertTrue(delivery.delivered(), "delivered once the edge accepted again: " + delivery);
     assertEquals(1, StubEventsServer.puts().size());
+  }
+
+  /**
+   * The INLINE publish keeps {@code publish}'s promise not to block for long: against an edge that
+   * stays down it retries for its own short budget — not the policy's thirty seconds — and then the
+   * outbox owns the event, whose sweep, under the full budget, delivers it once the edge is back.
+   *
+   * <p>The bus is given a hand-built publisher with a one-second inline budget, so the case runs in
+   * about that; loopback retries are on because the stand-in edge is local. The shipped five
+   * seconds is asserted on the injected publisher below.
+   */
+  @Test
+  void anInlinePublishGivesUpWithinItsShortBudgetAndTheOutboxOwnsTheEvent() {
+    EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(1));
+    patient.eventsUrl = ProxiedEventsServer.url();
+    patient.publishTimeout = Duration.ofSeconds(5);
+    QuarkusMock.installMockForType(patient, EventsPublisher.class);
+    ThingHappened event = new ThingHappened(null, "inline", 1, T0);
+    String id = event.eventId().toString();
+
+    edge.refuse();
+    long started = System.nanoTime();
+    bus.publish(event);
+    Duration took = elapsed(started);
+
+    assertTrue(took.toMillis() >= 700, "the inline attempt did ride the outage for a while: " + took);
+    assertTrue(took.toMillis() < 3_000, "and gave up within its short budget: " + took);
+    assertTrue(StubEventsServer.puts().isEmpty(), "nothing reached qits-events");
+    OutboxEvent row = row(id);
+    assertNotNull(row, "the outbox owns the event");
+    assertEquals(OutboxStatus.PENDING, row.status);
+    assertEquals(0, row.refusals, "an unreachable edge spends no refusal");
+
+    edge.accept();
+    clock.advance(Duration.ofSeconds(1));
+    assertEquals(1, outboxSweeper.sweep(), "the sweep delivers it once the edge is back");
+    assertEquals(0, outboxCount());
+    assertEquals(List.of(id), StubEventsServer.puts().stream().map(StubEventsServer.Put::id).toList());
+  }
+
+  /** The shipped inline budget: five seconds, below the policy's thirty. */
+  @Test
+  void theShippedInlineRetryBudgetIsFiveSeconds() {
+    assertEquals(Duration.ofSeconds(5), publisher.inlineRetryBudget());
+    assertEquals(
+        Duration.ofSeconds(30),
+        new EventsPublisher(RetryPolicy.standard(), Duration.ofMinutes(5)).inlineRetryBudget(),
+        "never above the policy's own budget");
   }
 
   /**
@@ -217,7 +272,11 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   // -- helpers -------------------------------------------------------------------------------------
 
   private static QitsHttpClients retryingClients() {
-    return QitsHttpClients.of(OpenTelemetry.noop(), null, RetryPolicy.standard().withLoopbackRetries());
+    return QitsHttpClients.of(OpenTelemetry.noop(), null, loopbackRetrying());
+  }
+
+  private static RetryPolicy loopbackRetrying() {
+    return RetryPolicy.standard().withLoopbackRetries();
   }
 
   /** What qits-events does with a publish: store it, then broadcast it to every open stream. */

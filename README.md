@@ -70,10 +70,10 @@ delivery from there. A caller therefore never sees a delivery failure and never 
 to do about one — which is what lets a publish sit in the middle of a business transition without
 becoming a way for that transition to fail.
 
-"Not long" has one exception, and it is deliberate: while the edge is *refusing connections* — a
-switchover, see [Crossing the edge](#crossing-the-edge) — the inline attempt waits it out under
-qits-http-core's retry policy for up to its 30-second budget before the event goes to the outbox.
-The 5s deadline still bounds every attempt that got a connection.
+"Not long" survives an edge switchover too (qits-428): the inline attempt rides one out — refused
+or reset connections, a `503 Retry-After` — for `qits.eventstream.publish-retry-budget` (5s) and
+no longer, then hands the event to the outbox, which is the durable path and retries under the full
+30-second budget. So the inline call is bounded by that budget plus one attempt's own deadline.
 
 ### Consuming
 
@@ -366,6 +366,7 @@ application (250) and the environment (300) override any of it. A library jar's 
 | `qits.events.url` | `http://qits-events:8080` | scheme + host + port, **no path**. This module appends `/events/api/events/{id}` and `/events/stream` itself, swapping the scheme to `ws(s)` for the second. A path here yields a doubled one and a 404 nothing retries out of. |
 | `qits.eventstream.enabled` | `true` | the master switch. |
 | `qits.eventstream.publish-timeout` | `PT5S` | the inline attempt's deadline, after which the outbox owns the event. |
+| `qits.eventstream.publish-retry-budget` | `PT5S` | how long the **inline** attempt rides out an edge switchover before the outbox owns the event. Capped at qits-http-core's `qits.http.retry.budget` (30s); `PT0S` makes it a single try. The outbox's resend and the catch-up reads keep the full budget. |
 | `qits.eventstream.max-attempts` | `5` | the **refusal** budget, counting the inline attempt: five means the PUT plus four sweeps against a service that is answering. An attempt that got no answer spends none of it. |
 | `qits.eventstream.sweep-interval` | `10s` | how often the sweeper looks. A floor on how late a retry can be, never a cause of an early one. |
 | `qits.eventstream.redial-initial-backoff` | `PT1S` | doubled per consecutive failure. |
@@ -525,7 +526,8 @@ answers `503 Retry-After` for a second or two. All three channels ride it out, e
 
 | channel | what carries it through a switchover |
 |---|---|
-| publish (`EventsPublisher`, `PUT`) | qits-http-core's `RetryPolicy`, then the outbox |
+| publish, inline (`QitsEventBus` → `EventsPublisher.putInline`, `PUT`) | `RetryPolicy` cut to `qits.eventstream.publish-retry-budget` (5s), then the outbox |
+| publish, from the outbox (`OutboxSweeper` → `EventsPublisher.put`) | `RetryPolicy`, full budget, then the next sweep |
 | catch-up read (`EventsQuery`, `GET`) | qits-http-core's `RetryPolicy`, then the next sweep |
 | the stream (`EventStreamSubscriber`, websocket) | its own unbounded redial, then the catch-up sweep |
 
@@ -533,7 +535,9 @@ answers `503 Retry-After` for a second or two. All three channels ride it out, e
 retry policy with nothing configured here (qits-428): a connection that failed before the request
 was sent is retried for any method; a reset before the response, or a `502`/`503`/`504` carrying
 `Retry-After`, is retried because both calls are idempotent — a `PUT` to a client-chosen id and a
-`GET`. Pauses start at 250 ms and double, within 30 s from the first attempt, and a call that needed
+`GET`. Pauses start at 250 ms and double, within 30 s from the first attempt — except the inline publish,
+whose budget is cut to five seconds because it runs on the caller's thread and the outbox is right
+behind it — and a call that needed
 more than one attempt logs one WARN from `eu.wohlben.qits.http.RetryPolicy`. A request *timeout* is
 not retried, nor is an unresolvable name, nor any other status. **The policy is not widened here**:
 had either call been a `POST`, it would be resent only when the connection failed before sending,
@@ -550,7 +554,8 @@ be. The subscriber redials without bound and resubscribes on every open, so a cu
 Frames broadcast while it was away are not replayed to typed and raw listeners (at-most-once, as
 above); a durable listener gets them from the next catch-up sweep, which pages from its watermark,
 and the claim makes a frame that arrives on both channels take effect once. `EdgeSwitchoverTest`
-proves that end to end through a TCP proxy that resets every connection mid-stream, refuses new ones
+proves that end to end, and that an inline publish against an edge that stays down gives up within
+its short budget and lands in the outbox, through a TCP proxy that resets every connection mid-stream, refuses new ones
 for a while and then accepts again: every event after the watermark is handled exactly once, the
 watermark does not move during the outage, and the typed listener misses only what was broadcast
 while it was cut off.

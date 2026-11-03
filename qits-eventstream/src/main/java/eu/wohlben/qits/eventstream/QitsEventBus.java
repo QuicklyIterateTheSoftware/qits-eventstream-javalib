@@ -140,7 +140,7 @@ public class QitsEventBus {
       EventEnvelope envelope =
           EventEnvelope.of(
               event, parent, environment.orElse("platform"), publisherName.orElse(null));
-      EventsPublisher.Delivery attempt = publisher.put(eventId, envelope);
+      EventsPublisher.Delivery attempt = publisher.putInline(eventId, envelope);
       if (attempt.delivered()) {
         return;
       }

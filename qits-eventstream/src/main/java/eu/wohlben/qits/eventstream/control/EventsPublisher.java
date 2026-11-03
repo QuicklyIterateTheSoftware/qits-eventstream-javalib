@@ -1,8 +1,11 @@
 package eu.wohlben.qits.eventstream.control;
 
+import eu.wohlben.qits.http.CallerHeader;
 import eu.wohlben.qits.http.QitsHttpClients;
+import eu.wohlben.qits.http.RetryPolicy;
 import io.opentelemetry.api.OpenTelemetry;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,8 +19,9 @@ import org.jboss.logging.Logger;
 /**
  * The single HTTP call this module makes: {@code PUT {qits.events.url}/events/api/events/{id}} with
  * the envelope. Used twice — once inline by {@link eu.wohlben.qits.eventstream.QitsEventBus} and
- * again by {@link OutboxSweeper} — with identical semantics, which is what makes "a retry is the
- * same request" true rather than merely intended.
+ * again by {@link OutboxSweeper} — sending the identical request, which is what makes "a retry is
+ * the same request" true rather than merely intended. Only the patience differs: the inline
+ * attempt rides out a switchover for a few seconds, the outbox's for the standard budget.
  *
  * <p><b>The four answers are four different futures</b>, and collapsing any pair loses something:
  *
@@ -126,7 +130,8 @@ public class EventsPublisher {
    * <p>The wrapper also applies qits-http-core's switchover retry (qits-428), with nothing configured
    * here: this call is a PUT, idempotent, so a connection that failed before sending, a reset before
    * the response, and a {@code 502}/{@code 503}/{@code 504} carrying {@code Retry-After} are all
-   * sent again within the policy's budget. A request timeout is not. The outcome below is classified
+   * sent again within the policy's budget — the whole of it for {@link #put}, the inline budget for
+   * {@link #putInline}. A request timeout is not. The outcome below is classified
    * from the last attempt, exactly as from a single one; README, "Crossing the edge".
    *
    * <p>Do not widen that policy here. A {@code POST} would be resent only when the connection failed
@@ -136,25 +141,76 @@ public class EventsPublisher {
   private final HttpClient client;
 
   /**
+   * The same raw client for the INLINE attempt, under the same policy with its budget cut to what
+   * {@value #INLINE_RETRY_BUDGET} sets, five seconds by default (qits-428). The inline attempt sits on the publishing service's
+   * own thread, and the outbox is the durable path: waiting the standard thirty seconds there would
+   * break {@code publish}'s promise not to block for long, and buy nothing the sweeper does not.
+   * The outbox's own resend keeps {@link #client} and the whole budget, because nobody waits on it.
+   */
+  private final HttpClient inlineClient;
+
+  /** The inline client's retry budget, never more than the outbox client's. */
+  private final Duration inlineRetryBudget;
+
+  /** The key that sets the inline attempt's retry budget. */
+  static final String INLINE_RETRY_BUDGET = "qits.eventstream.publish-retry-budget";
+
+  /** Its shipped default, which is also the hand-built publisher's. */
+  static final Duration DEFAULT_INLINE_RETRY_BUDGET = Duration.ofSeconds(5);
+
+  /**
    * For a consumer that builds this class by hand instead of letting CDI inject it, as several
    * consumer-pact probes across the estate do — {@code new EventsPublisher()}, then a
-   * package-private field set directly. Kept public and working rather than broken by this
-   * change: equivalent to {@code EventsPublisher(QitsHttpClients.of(OpenTelemetry.noop(), null))},
-   * no span, no caller header, and the standard retry policy (which never retries a loopback
-   * target).
+   * package-private field set directly. Kept public and working: no span, no caller header, the
+   * standard retry policy (which never retries a loopback target) for {@link #put}, and the default
+   * inline budget for {@link #putInline}.
    */
   public EventsPublisher() {
-    this(QitsHttpClients.of(OpenTelemetry.noop(), null));
+    this(RetryPolicy.standard(), DEFAULT_INLINE_RETRY_BUDGET);
   }
 
   @Inject
-  EventsPublisher(QitsHttpClients clients) {
-    this.client =
-        clients.wrap(
-            HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(Duration.ofSeconds(2))
-                .build());
+  EventsPublisher(
+      QitsHttpClients clients,
+      Instance<OpenTelemetry> openTelemetry,
+      @ConfigProperty(name = INLINE_RETRY_BUDGET, defaultValue = "PT5S") Duration inlineRetryBudget) {
+    // RetryPolicy.fromConfig() is the policy the injected bean itself carries, so the inline client
+    // differs from the outbox one in its budget and nothing else.
+    this(
+        clients,
+        openTelemetry.isResolvable() ? openTelemetry.get() : OpenTelemetry.noop(),
+        CallerHeader.value().orElse(null),
+        RetryPolicy.fromConfig(),
+        inlineRetryBudget);
+  }
+
+  /** A hand-built publisher on {@code policy}, for a test whose stand-in edge needs its own. */
+  EventsPublisher(RetryPolicy policy, Duration inlineRetryBudget) {
+    this(
+        QitsHttpClients.of(OpenTelemetry.noop(), null, policy),
+        OpenTelemetry.noop(),
+        null,
+        policy,
+        inlineRetryBudget);
+  }
+
+  private EventsPublisher(
+      QitsHttpClients clients,
+      OpenTelemetry openTelemetry,
+      String caller,
+      RetryPolicy policy,
+      Duration inlineRetryBudget) {
+    HttpClient raw =
+        HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(2))
+            .build();
+    this.client = clients.wrap(raw);
+    this.inlineRetryBudget =
+        inlineRetryBudget.compareTo(policy.budget()) < 0 ? inlineRetryBudget : policy.budget();
+    this.inlineClient =
+        QitsHttpClients.wrap(
+            raw, openTelemetry, caller, policy.withBudget(this.inlineRetryBudget));
   }
 
   @ConfigProperty(name = "qits.events.url")
@@ -163,8 +219,27 @@ public class EventsPublisher {
   @ConfigProperty(name = "qits.eventstream.publish-timeout", defaultValue = "PT5S")
   Duration publishTimeout;
 
-  /** One attempt at delivering one event. Never throws. */
+  /**
+   * The outbox's attempt at delivering one event, under the standard retry budget. Never throws.
+   */
   public Delivery put(String eventId, EventEnvelope envelope) {
+    return send(client, eventId, envelope);
+  }
+
+  /**
+   * The inline attempt, on the publisher's own thread: the same request, giving up on a switchover
+   * once the budget {@value #INLINE_RETRY_BUDGET} sets is spent, so the outbox can own the event. Never throws.
+   */
+  public Delivery putInline(String eventId, EventEnvelope envelope) {
+    return send(inlineClient, eventId, envelope);
+  }
+
+  /** The inline attempt's retry budget, as configured and capped. */
+  Duration inlineRetryBudget() {
+    return inlineRetryBudget;
+  }
+
+  private Delivery send(HttpClient via, String eventId, EventEnvelope envelope) {
     URI target = URI.create(base() + EVENTS_PATH + eventId);
     try {
       HttpRequest request =
@@ -177,7 +252,7 @@ public class EventsPublisher {
                   HttpRequest.BodyPublishers.ofString(
                       CanonicalJson.envelope(envelope), StandardCharsets.UTF_8))
               .build();
-      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      HttpResponse<String> response = via.send(request, HttpResponse.BodyHandlers.ofString());
       return classify(eventId, response);
     } catch (InterruptedException e) {
       // Restore the flag and treat it as "nothing came back": the caller is a worker being asked to
