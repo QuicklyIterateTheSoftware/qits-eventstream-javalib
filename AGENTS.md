@@ -423,7 +423,7 @@ record it.
 
 ## The suite
 
-194 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+199 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a
@@ -467,6 +467,13 @@ clock.
 websocket upgrade, with scripted responses and recorded requests. It is what makes the clone-alone
 rule survivable, and it is the thing to extend when a test needs the server to behave a new way — not
 a mock of `EventsPublisher`, which would stop the wire being under test.
+
+`CuttableProxy` (with `ProxiedEventsServer`, the resource that puts it in front of the stub) is the
+edge: plain TCP, `SO_LINGER 0`, so `refuse()` resets every connection on both legs and closes the
+listener, `accept()` binds the same port again, and `swallowNext(n)` resets connections after the
+request went out. `EdgeSwitchoverTest` drives it. A test aimed at a closed port stays on loopback,
+which qits-http-core's retry policy never retries — the proxy cases opt in with
+`RetryPolicy.standard().withLoopbackRetries()` on a hand-built client.
 
 **Its list route is the one place the stub decides anything, and that is deliberate.** A paging loop
 can only be tested against something that pages: the properties under test are a cursor that neither

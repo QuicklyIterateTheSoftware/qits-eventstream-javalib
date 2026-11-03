@@ -122,6 +122,16 @@ public class EventsPublisher {
    * service-to-service call like any other, so it opens a CLIENT span and carries {@code
    * X-Qits-Caller} on top of the two headers below, which stay exactly as they were — that pair is
    * the forward-auth principal qits-events authorizes on, and the caller header is diagnostic only.
+   *
+   * <p>The wrapper also applies qits-http-core's switchover retry (qits-428), with nothing configured
+   * here: this call is a PUT, idempotent, so a connection that failed before sending, a reset before
+   * the response, and a {@code 502}/{@code 503}/{@code 504} carrying {@code Retry-After} are all
+   * sent again within the policy's budget. A request timeout is not. The outcome below is classified
+   * from the last attempt, exactly as from a single one; README, "Crossing the edge".
+   *
+   * <p>Do not widen that policy here. A {@code POST} would be resent only when the connection failed
+   * before sending, which is the policy's rule; this call is retried more because it is a {@code
+   * PUT} to a client-chosen id, not because this class asked for more.
    */
   private final HttpClient client;
 
@@ -130,7 +140,8 @@ public class EventsPublisher {
    * consumer-pact probes across the estate do — {@code new EventsPublisher()}, then a
    * package-private field set directly. Kept public and working rather than broken by this
    * change: equivalent to {@code EventsPublisher(QitsHttpClients.of(OpenTelemetry.noop(), null))},
-   * no span, no caller header, the raw client's behaviour exactly.
+   * no span, no caller header, and the standard retry policy (which never retries a loopback
+   * target).
    */
   public EventsPublisher() {
     this(QitsHttpClients.of(OpenTelemetry.noop(), null));

@@ -70,6 +70,11 @@ delivery from there. A caller therefore never sees a delivery failure and never 
 to do about one — which is what lets a publish sit in the middle of a business transition without
 becoming a way for that transition to fail.
 
+"Not long" has one exception, and it is deliberate: while the edge is *refusing connections* — a
+switchover, see [Crossing the edge](#crossing-the-edge) — the inline attempt waits it out under
+qits-http-core's retry policy for up to its 30-second budget before the event goes to the outbox.
+The 5s deadline still bounds every attempt that got a connection.
+
 ### Consuming
 
 ```java
@@ -512,6 +517,47 @@ rate-limits itself to five-minutely as an outage lengthens.
 
 The known hole is named in `OutboxEvent`'s javadoc and deliberately left open: a crash between the
 inline attempt failing and the row committing loses the event.
+
+## Crossing the edge
+
+Services reach qits-events through the public edge, and an edge rollover drops connections and
+answers `503 Retry-After` for a second or two. All three channels ride it out, each in its own way:
+
+| channel | what carries it through a switchover |
+|---|---|
+| publish (`EventsPublisher`, `PUT`) | qits-http-core's `RetryPolicy`, then the outbox |
+| catch-up read (`EventsQuery`, `GET`) | qits-http-core's `RetryPolicy`, then the next sweep |
+| the stream (`EventStreamSubscriber`, websocket) | its own unbounded redial, then the catch-up sweep |
+
+**Both HTTP calls go through `QitsHttpClients.wrap`** (qits-1198), so they carry the platform's one
+retry policy with nothing configured here (qits-428): a connection that failed before the request
+was sent is retried for any method; a reset before the response, or a `502`/`503`/`504` carrying
+`Retry-After`, is retried because both calls are idempotent — a `PUT` to a client-chosen id and a
+`GET`. Pauses start at 250 ms and double, within 30 s from the first attempt, and a call that needed
+more than one attempt logs one WARN from `eu.wohlben.qits.http.RetryPolicy`. A request *timeout* is
+not retried, nor is an unresolvable name, nor any other status. **The policy is not widened here**:
+had either call been a `POST`, it would be resent only when the connection failed before sending,
+and that is the policy's rule rather than this library's to relax. The budget is
+`qits.http.retry.budget`, the consuming application's setting and not one of this jar's.
+
+The retry sits *below* the four outcomes: an attempt whose retries ran out is classified exactly
+as a single attempt would have been, so a switchover longer than the budget is still `UNREACHABLE`
+and the outbox owns it forever, and a read that gave up is still `Unavailable` and leaves the
+watermark where it was.
+
+**The stream is not retried by the policy** — a websocket is not a request — and does not need to
+be. The subscriber redials without bound and resubscribes on every open, so a cut costs a reconnect.
+Frames broadcast while it was away are not replayed to typed and raw listeners (at-most-once, as
+above); a durable listener gets them from the next catch-up sweep, which pages from its watermark,
+and the claim makes a frame that arrives on both channels take effect once. `EdgeSwitchoverTest`
+proves that end to end through a TCP proxy that resets every connection mid-stream, refuses new ones
+for a while and then accepts again: every event after the watermark is handled exactly once, the
+watermark does not move during the outage, and the typed listener misses only what was broadcast
+while it was cut off.
+
+**A call to a loopback target is never retried** (the policy's own rule: the process's own host does
+not cross the edge), which is also what keeps this suite's closed-port cases at one refused connect.
+The proxy cases opt back in with `RetryPolicy.standard().withLoopbackRetries()`.
 
 ## Pacting what this library sends for you
 
