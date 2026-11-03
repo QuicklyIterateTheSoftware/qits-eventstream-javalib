@@ -20,6 +20,9 @@ public class RecordingEventsServer implements QuarkusTestResourceLifecycleManage
 
   static final List<String> BODIES = new CopyOnWriteArrayList<>();
 
+  /** Each PUT's Authorization header, in arrival order ("null" when none was sent). */
+  static final List<String> AUTHORIZATIONS = new CopyOnWriteArrayList<>();
+
   private HttpServer server;
 
   @Override
@@ -32,12 +35,28 @@ public class RecordingEventsServer implements QuarkusTestResourceLifecycleManage
     server.createContext(
         "/events/api/events/",
         exchange -> {
+          AUTHORIZATIONS.add(String.valueOf(exchange.getRequestHeaders().getFirst("Authorization")));
           BODIES.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
           exchange.sendResponseHeaders(201, -1);
           exchange.close();
         });
+    // The consumer's own idp (qits-1328): the library publishes with the consuming service's
+    // `quarkus.oidc-client.qits` token and sends nothing without one.
+    server.createContext(
+        "/idp/token",
+        exchange -> {
+          exchange.getRequestBody().readAllBytes();
+          byte[] token =
+              "{\"access_token\":\"consumer-token\",\"token_type\":\"Bearer\",\"expires_in\":3600}"
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, token.length);
+          exchange.getResponseBody().write(token);
+          exchange.close();
+        });
     server.start();
-    return Map.of("qits.events.url", "http://127.0.0.1:" + server.getAddress().getPort());
+    String base = "http://127.0.0.1:" + server.getAddress().getPort();
+    return Map.of("qits.events.url", base, "qits.test.idp.url", base + "/idp");
   }
 
   @Override

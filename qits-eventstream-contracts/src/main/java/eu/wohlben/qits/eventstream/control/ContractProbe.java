@@ -1,5 +1,6 @@
 package eu.wohlben.qits.eventstream.control;
 
+import io.smallrye.mutiny.Uni;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
@@ -9,7 +10,13 @@ import java.util.List;
  * EventsQuery} and {@link EventPage} are package-private, so this class sits in their package — in
  * the qits-eventstream-contracts jar, a split package on purpose, which is only ever on a test
  * classpath — and hands {@code contracts/EventstreamPact} the exact code {@link CatchupSweeper} and
- * {@link OutboxSweeper} run, pointed at a pact mock server. No CDI: the clients need only their url.
+ * {@link OutboxSweeper} run, pointed at a pact mock server. No CDI: the clients need only their url
+ * and a bearer.
+ *
+ * <p>The bearer is a fixed placeholder (qits-1328). The real one is the consuming service's own
+ * {@code quarkus.oidc-client.qits} token, which a pact cannot hold; the interactions pin no request
+ * header, so what is sent there is not part of the contract, only that something is — a hand-built
+ * client with no bearer fails closed and would send nothing at all.
  */
 public final class ContractProbe {
 
@@ -22,7 +29,12 @@ public final class ContractProbe {
   private final EventsQuery query = new EventsQuery();
   private final EventsPublisher publisher = new EventsPublisher();
 
+  /** The placeholder the probe's clients present. Not a token; the mock server reads no header. */
+  static final String PLACEHOLDER_AUTHORIZATION = "Bearer contract-probe";
+
   public ContractProbe(String eventsUrl) {
+    query.bearer = () -> Uni.createFrom().item(PLACEHOLDER_AUTHORIZATION);
+    publisher.bearer = query.bearer;
     query.eventsUrl = eventsUrl;
     publisher.eventsUrl = eventsUrl;
     publisher.publishTimeout = Duration.ofSeconds(5);

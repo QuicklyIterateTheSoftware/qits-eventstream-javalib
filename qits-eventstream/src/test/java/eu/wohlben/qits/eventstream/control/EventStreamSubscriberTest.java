@@ -195,6 +195,32 @@ class EventStreamSubscriberTest {
    * forgets an idle flow — is dropped and redialled, and the late close of the dropped one does not
    * open a second stream.
    */
+  /**
+   * qits-1328: the upgrade carries the service's own bearer from the real default bearer, and no
+   * forwarded user/roles pair. Asked of a redial, because the first dial happened at startup — before
+   * any test could clear the stub's record — and because the redial is the one that must reuse the
+   * cached token rather than mint again.
+   */
+  @Test
+  void theUpgradeCarriesTheServicesOwnBearerAndNoForwardedPair() {
+    StubEventsServer.reset();
+    int mintsBefore = StubEventsServer.tokenRequests();
+    StubEventsServer.dropStreams();
+    await(() -> !streamCallers().isEmpty() && subscriber.connected(), "the stream to be redialled");
+
+    StubEventsServer.Caller upgrade = streamCallers().get(0);
+    assertEquals("Bearer " + StubEventsServer.TOKEN, upgrade.authorization());
+    assertNull(upgrade.user(), "no forwarded user beside the bearer");
+    assertNull(upgrade.roles(), "no forwarded roles beside the bearer");
+    assertEquals(mintsBefore, StubEventsServer.tokenRequests(), "a redial mints nothing");
+  }
+
+  private static List<StubEventsServer.Caller> streamCallers() {
+    return StubEventsServer.callers().stream()
+        .filter(caller -> caller.kind().equals("stream"))
+        .toList();
+  }
+
   @Test
   void aSilentStreamIsDroppedAndRedialled() throws Exception {
     StubEventsServer.reset();

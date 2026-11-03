@@ -26,7 +26,7 @@ consumer never names that artifact — it only has to be reachable in the same M
 
 ## The whole public surface
 
-Fifteen types, plus `EventSelectionException`. Everything else in here is how they are kept.
+Sixteen types, plus `EventSelectionException`. Everything else in here is how they are kept.
 
 | | |
 |---|---|
@@ -45,6 +45,7 @@ Fifteen types, plus `EventSelectionException`. Everything else in here is how th
 | `EventSelection` | which events of one name a consumer wants, by conditions on the payload. |
 | `EventSelectionEvaluator` | whether an event matches a selection. |
 | `EventSelectionGrammar` | the compact text form of a selection, as a CLI takes it. |
+| `EventStreamBearer` | who the service is to qits-events. Shipped over its own `quarkus.oidc-client.qits`; declare a bean of it only to take the token from somewhere else. |
 
 Two `@Provider` filters, `CausationClientFilter` and `CausationServerFilter`, apply the header
 automatically; nobody names them, so they are not in the table.
@@ -400,6 +401,36 @@ in the consuming application's `application.properties`, exactly where it goes f
 `publish()` is a debug log, neither sweeper does anything, the subscriber never dials and no durable
 listener is offered anything. There is no half-enabled state.
 
+### Who the calls say they are: the service's own `qits` client
+
+Every call this jar makes — the `PUT`, the catch-up's reads, the stream's upgrade — carries
+`Authorization: Bearer <token>` from **the consuming service's own named OIDC client `qits`**
+(qits-1328, epic qits-543 6a), read through `OidcClients.getClient("qits")`. The jar has no client
+settings of its own and brings `quarkus-oidc-client` with it; the consumer configures the client,
+the way every service already does for its other peer calls — from the `idp:client` resource in its
+`.config/qits/deployments.yml`:
+
+    quarkus.oidc-client.qits.auth-server-url=${QITS_RESOURCE_IDP_URL:https://idp.qits.${QITS_DOMAIN}/idp}
+    quarkus.oidc-client.qits.discovery-enabled=false
+    quarkus.oidc-client.qits.token-path=token
+    quarkus.oidc-client.qits.client-id=${QITS_RESOURCE_IDP_CLIENT_ID:dev-qits-<app>}
+    quarkus.oidc-client.qits.credentials.secret=${QITS_RESOURCE_IDP_CLIENT_SECRET:}
+    quarkus.oidc-client.qits.grant.type=client
+    quarkus.oidc-client.qits.grant-options.client.audience=qits-platform
+    quarkus.oidc-client.qits.early-tokens-acquisition=false
+
+One token serves every call until it expires (`TokensHelper`); a publish mints nothing.
+
+**There is no fallback, and no forwarded user/roles header pair.** No client configured, a
+disabled client, a mint that failed: the call is not made, and the bearer says which client is
+missing in one WARN a minute. A publish counts as *unreachable* — the row stays in the outbox and is
+retried at the cap, spending none of the refusal budget; a catch-up read is unavailable and the
+watermark stays; the stream counts a failed dial and redials on its backoff, forever. Configure the
+client and all three recover by themselves.
+
+A service whose token comes from elsewhere declares its own `@ApplicationScoped EventStreamBearer`;
+the shipped one is a `@DefaultBean` and yields.
+
 ### The database, and the resource a deployment must declare
 
 This jar owns its **own** named datasource, persistence unit and Flyway lineage — `eventstream`,
@@ -543,6 +574,12 @@ not retried, nor is an unresolvable name, nor any other status. **The policy is 
 had either call been a `POST`, it would be resent only when the connection failed before sending,
 and that is the policy's rule rather than this library's to relax. The budget is
 `qits.http.retry.budget`, the consuming application's setting and not one of this jar's.
+
+Every attempt — the first and each retry, inline or from the outbox — carries the same
+`Authorization: Bearer` from the service's own `qits` client (above, "Who the calls say they are"),
+which is what qits-events authorizes on; `X-Qits-Caller` beside it is attribution only, and no
+user/roles pair travels. The token is read once per call, before the retry loop, so a switchover
+costs no extra mint.
 
 The retry sits *below* the four outcomes: an attempt whose retries ran out is classified exactly
 as a single attempt would have been, so a switchover longer than the budget is still `UNREACHABLE`

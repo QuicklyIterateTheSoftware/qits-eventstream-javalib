@@ -1,5 +1,6 @@
 package eu.wohlben.qits.eventstream.control;
 
+import eu.wohlben.qits.eventstream.EventStreamBearer;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.websockets.next.BasicWebSocketConnector;
@@ -53,6 +54,13 @@ import org.jboss.logging.Logger;
  * frame or pong counts as hearing from the far side. A stream that has said nothing for {@code
  * qits.eventstream.stream-silence-limit} is closed and redialled like any other drop.
  *
+ * <p><b>The upgrade carries the service's own bearer and nothing else (qits-1328).</b> Each dial asks
+ * {@link EventStreamBearer} for the {@code Authorization} value first — the cached token, so a
+ * redial mints nothing — and with no token there is no dial: the attempt counts as a failed one and
+ * the redial backoff takes over, exactly as for a refused connection. The subscriber never gives up
+ * on a missing client, so the stream comes up by itself once the client is configured, and the
+ * bearer says so at WARN at most once a minute rather than on every attempt.
+ *
  * <p>Nothing is dialled when the module is disabled, and nothing is dialled when the union is empty
  * — an open stream nobody reads is a connection qits-events maintains for no one. Note what that
  * asks of a raw listener whose interest is dynamic: it must want <em>something</em> by the time the
@@ -70,6 +78,8 @@ public class EventStreamSubscriber {
   @Inject EventDispatcher dispatcher;
 
   @Inject Vertx vertx;
+
+  @Inject EventStreamBearer bearer;
 
   @ConfigProperty(name = "qits.eventstream.enabled")
   boolean enabled;
@@ -164,13 +174,33 @@ public class EventStreamSubscriber {
     if (!running) {
       return;
     }
+    bearer
+        .authorization()
+        // A mint that never answers must not park the subscriber for good: it is a failed dial.
+        .ifNoItem()
+        .after(BEARER_TIMEOUT)
+        .fail()
+        .subscribe()
+        .with(
+            this::connect,
+            failure -> {
+              // Fail closed: nothing is dialled without a token. The bearer logs which client is
+              // missing (throttled); here it is one more failed attempt for the backoff.
+              LOG.debugf("event stream not dialled, no bearer: %s", failure.getMessage());
+              redial();
+            });
+  }
+
+  private void connect(String authorization) {
+    if (!running) {
+      return;
+    }
     URI base = streamBaseUri();
     LOG.debugf("dialling the event stream at %s%s", base, STREAM_PATH);
     BasicWebSocketConnector.create()
         .baseUri(base)
         .path(STREAM_PATH)
-        .addHeader("X-Qits-User", "qits-eventstream")
-        .addHeader("X-Qits-Roles", "qits:system")
+        .addHeader("Authorization", authorization)
         // A listener's onEvent is arbitrary application code and is allowed to block; the frame
         // callback therefore must not run on an event loop.
         .executionModel(BasicWebSocketConnector.ExecutionModel.BLOCKING)
@@ -299,4 +329,7 @@ public class EventStreamSubscriber {
   private static final Map<String, String> SCHEMES = Map.of("http", "ws", "https", "wss");
 
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(2);
+
+  /** How long a dial waits for its bearer before it counts as a failed attempt. */
+  static final Duration BEARER_TIMEOUT = Duration.ofSeconds(10);
 }

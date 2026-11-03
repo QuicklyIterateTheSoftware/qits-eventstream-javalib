@@ -26,9 +26,11 @@ public class ProxiedEventsServer implements QuarkusTestResourceLifecycleManager 
 
   @Override
   public Map<String, String> start() {
-    URI direct = URI.create(stub.start().get("qits.events.url"));
+    Map<String, String> started = stub.start();
+    URI direct = URI.create(started.get("qits.events.url"));
     proxy = CuttableProxy.forwardingTo(direct.getPort());
-    return Map.of("qits.events.url", url());
+    // The token endpoint stays direct (qits-1328): the cut under test is qits-events', not the idp's.
+    return Map.of("qits.events.url", url(), "qits.test.idp.url", started.get("qits.test.idp.url"));
   }
 
   @Override

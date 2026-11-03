@@ -1,5 +1,6 @@
 package eu.wohlben.qits.eventstream.control;
 
+import eu.wohlben.qits.eventstream.EventStreamBearer;
 import eu.wohlben.qits.http.CallerHeader;
 import eu.wohlben.qits.http.QitsHttpClients;
 import eu.wohlben.qits.http.RetryPolicy;
@@ -39,6 +40,14 @@ import org.jboss.logging.Logger;
  *       resolve, a deadline that passed with nothing on the socket. Nothing was learned about the
  *       event, only about the network, so the outbox <b>never gives up</b> on this class.
  * </ul>
+ *
+ * <p><b>No bearer counts as unreachable, and nothing is sent (qits-1328).</b> The PUT
+ * carries the service's own token from {@link EventStreamBearer} and nothing else says who the
+ * caller is: the forwarded user/roles header pair is gone, with no fallback. When no
+ * token can be had — no {@code quarkus.oidc-client.qits}, a disabled one, a mint that failed — the
+ * request is not made at all, and the attempt is {@link Outcome#UNREACHABLE}: nothing was learned
+ * about the event, only about this service's configuration, so the outbox keeps the row and retries
+ * at its cap rather than spending the budget a misconfiguration would otherwise exhaust.
  *
  * <p><b>The last two used to be one, and merging them cost real events.</b> Measured on the
  * 2026-08-10 bootstraps: a seed qits-ci was pointed at an alias that did not resolve, every publish
@@ -124,8 +133,9 @@ public class EventsPublisher {
    *
    * <p>Wrapped through {@link QitsHttpClients} (qits-1198): a PUT to qits-events is a
    * service-to-service call like any other, so it opens a CLIENT span and carries {@code
-   * X-Qits-Caller} on top of the two headers below, which stay exactly as they were — that pair is
-   * the forward-auth principal qits-events authorizes on, and the caller header is diagnostic only.
+   * X-Qits-Caller} beside the bearer. The caller header is diagnostic only; the bearer — the
+   * service's own, from {@link EventStreamBearer} (qits-1328) — is what qits-events authorizes on,
+   * and both the inline and the outbox attempt carry it.
    *
    * <p>The wrapper also applies qits-http-core's switchover retry (qits-428), with nothing configured
    * here: this call is a PUT, idempotent, so a connection that failed before sending, a reset before
@@ -139,6 +149,9 @@ public class EventsPublisher {
    * PUT} to a client-chosen id, not because this class asked for more.
    */
   private final HttpClient client;
+
+  /** Who the PUT says it is. Package-private and settable for the hand-built path, see below. */
+  EventStreamBearer bearer;
 
   /**
    * The same raw client for the INLINE attempt, under the same policy with its budget cut to what
@@ -164,6 +177,9 @@ public class EventsPublisher {
    * package-private field set directly. Kept public and working: no span, no caller header, the
    * standard retry policy (which never retries a loopback target) for {@link #put}, and the default
    * inline budget for {@link #putInline}.
+   *
+   * <p>A hand-built publisher has <b>no bearer</b> and so sends nothing until {@link #bearer} is set
+   * (as the contracts kit's {@code ContractProbe} does): failing closed is the only default there is.
    */
   public EventsPublisher() {
     this(RetryPolicy.standard(), DEFAULT_INLINE_RETRY_BUDGET);
@@ -173,6 +189,7 @@ public class EventsPublisher {
   EventsPublisher(
       QitsHttpClients clients,
       Instance<OpenTelemetry> openTelemetry,
+      EventStreamBearer bearer,
       @ConfigProperty(name = INLINE_RETRY_BUDGET, defaultValue = "PT5S") Duration inlineRetryBudget) {
     // RetryPolicy.fromConfig() is the policy the injected bean itself carries, so the inline client
     // differs from the outbox one in its budget and nothing else.
@@ -181,17 +198,22 @@ public class EventsPublisher {
         openTelemetry.isResolvable() ? openTelemetry.get() : OpenTelemetry.noop(),
         CallerHeader.value().orElse(null),
         RetryPolicy.fromConfig(),
-        inlineRetryBudget);
+        inlineRetryBudget,
+        bearer);
   }
 
-  /** A hand-built publisher on {@code policy}, for a test whose stand-in edge needs its own. */
+  /**
+   * A hand-built publisher on {@code policy}, for a test whose stand-in edge needs its own. Like the
+   * public one it has no bearer until {@link #bearer} is set.
+   */
   EventsPublisher(RetryPolicy policy, Duration inlineRetryBudget) {
     this(
         QitsHttpClients.of(OpenTelemetry.noop(), null, policy),
         OpenTelemetry.noop(),
         null,
         policy,
-        inlineRetryBudget);
+        inlineRetryBudget,
+        Unbuilt.BEARER);
   }
 
   private EventsPublisher(
@@ -199,7 +221,9 @@ public class EventsPublisher {
       OpenTelemetry openTelemetry,
       String caller,
       RetryPolicy policy,
-      Duration inlineRetryBudget) {
+      Duration inlineRetryBudget,
+      EventStreamBearer bearer) {
+    this.bearer = bearer;
     HttpClient raw =
         HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
@@ -241,13 +265,20 @@ public class EventsPublisher {
 
   private Delivery send(HttpClient via, String eventId, EventEnvelope envelope) {
     URI target = URI.create(base() + EVENTS_PATH + eventId);
+    String authorization;
+    try {
+      authorization = bearer.authorization().await().atMost(publishTimeout);
+    } catch (RuntimeException e) {
+      // Fail closed: no token, no request. The bearer has already said why (and which client) at
+      // WARN; the row records it too, so `status` on an outbox row explains itself.
+      return new Delivery(Outcome.UNREACHABLE, "not sent: " + e.getMessage());
+    }
     try {
       HttpRequest request =
           HttpRequest.newBuilder(target)
               .timeout(publishTimeout)
               .header("Content-Type", "application/json")
-              .header("X-Qits-User", "qits-eventstream")
-              .header("X-Qits-Roles", "qits:system")
+              .header("Authorization", authorization)
               .PUT(
                   HttpRequest.BodyPublishers.ofString(
                       CanonicalJson.envelope(envelope), StandardCharsets.UTF_8))

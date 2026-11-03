@@ -262,6 +262,8 @@ class CatchupSweepTest extends EventstreamTestSupport {
   @Test
   void anUnreachableLogIsAFailureAndNotAnEmptyPage() {
     EventsQuery unreachable = new EventsQuery();
+    // A bearer, so the request really is made and it is the socket that answers nothing (qits-1328).
+    unreachable.bearer = () -> io.smallrye.mutiny.Uni.createFrom().item("Bearer t");
     unreachable.eventsUrl = "http://127.0.0.1:1";
 
     assertThrows(

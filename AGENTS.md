@@ -354,7 +354,14 @@ counts as a use. That is asserted rather than trusted, since a removed listener 
 nothing and says nothing about it: the suite keeps a listener injected nowhere and a raw listener
 whose signature no `eventType()` produces, and requires both in the subscribe frame.
 
-Beyond that there are three facts a consumer gets wrong once each.
+Beyond that there are four facts a consumer gets wrong once each.
+
+- **No `quarkus.oidc-client.qits`, no calls (qits-1328).** Every call to qits-events carries the
+  consuming service's own `qits` client token and nothing else; with no such client the library
+  sends nothing at all and says so in a WARN a minute naming `quarkus.oidc-client.qits`. Boot is
+  fine without it — the extension leaves an unconfigured client out of `OidcClients` — which is
+  exactly why it is easy to miss: the symptom is an outbox that fills and a stream that never comes
+  up. The README's Configuration section has the block.
 
 - **The darkness belongs to the consumer, not to the library.** The jar ships
   `qits.eventstream.enabled=true` — a library that shipped dark is one whose first deployment
@@ -481,7 +488,10 @@ listener, `accept()` binds the same port again, and `swallowNext(n)` resets conn
 request went out. `EdgeSwitchoverTest` drives it, and installs a hand-built `EventsPublisher` with
 `QuarkusMock` where the bus itself has to retry against it. A test aimed at a closed port stays on loopback,
 which qits-http-core's retry policy never retries — the proxy cases opt in with
-`RetryPolicy.standard().withLoopbackRetries()` on a hand-built client.
+`RetryPolicy.standard().withLoopbackRetries()` on a hand-built client. A hand-built client has
+no bearer (`Unbuilt.BEARER`, qits-1328) and sends nothing until its `bearer` field is set, so those
+cases give it a fixed one; `ProxiedEventsServer` hands the stub's token endpoint over directly, not
+through the proxy, because the cut under test is qits-events'.
 
 **Its list route is the one place the stub decides anything, and that is deliberate.** A paging loop
 can only be tested against something that pages: the properties under test are a cursor that neither

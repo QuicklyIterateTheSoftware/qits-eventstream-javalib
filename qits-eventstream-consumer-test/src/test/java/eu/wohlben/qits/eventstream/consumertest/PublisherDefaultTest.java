@@ -9,6 +9,7 @@ import io.quarkus.test.common.WithTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ class PublisherDefaultTest {
   @Test
   void publishStampsItOnTheEnvelope() throws Exception {
     RecordingEventsServer.BODIES.clear();
+    RecordingEventsServer.AUTHORIZATIONS.clear();
 
     bus.publish(new SomethingHappened(UUID.randomUUID(), Instant.parse("2026-10-31T12:00:00Z")));
 
@@ -50,5 +52,7 @@ class PublisherDefaultTest {
     assertEquals(
         THIS_APPLICATION,
         new ObjectMapper().readTree(RecordingEventsServer.BODIES.get(0)).get("publisher").asText());
+    // qits-1328: the consumer's own `qits` client is what the library's PUT says it is.
+    assertEquals(List.of("Bearer consumer-token"), RecordingEventsServer.AUTHORIZATIONS);
   }
 }

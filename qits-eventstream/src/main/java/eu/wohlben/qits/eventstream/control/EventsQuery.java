@@ -1,5 +1,6 @@
 package eu.wohlben.qits.eventstream.control;
 
+import eu.wohlben.qits.eventstream.EventStreamBearer;
 import eu.wohlben.qits.eventstream.QitsRawEventListener;
 import eu.wohlben.qits.http.QitsHttpClients;
 import io.opentelemetry.api.OpenTelemetry;
@@ -78,8 +79,10 @@ public class EventsQuery {
   /**
    * Wrapped through {@link QitsHttpClients} (qits-1198): a read from qits-events is a
    * service-to-service call like any other, so it opens a CLIENT span and carries {@code
-   * X-Qits-Caller} on top of the two headers below, which stay exactly as they were — that pair is
-   * the forward-auth principal qits-events authorizes on, and the caller header is diagnostic only.
+   * X-Qits-Caller} beside the bearer. The caller header is diagnostic only; the bearer — the
+   * service's own, from {@link EventStreamBearer} (qits-1328) — is what qits-events authorizes on.
+   * With no bearer the read is not made and is {@link Unavailable}, which leaves the watermark where
+   * it is: nothing was learned about the log.
    *
    * <p>The wrapper also applies qits-http-core's switchover retry (qits-428), with nothing configured
    * here: this call is a GET, idempotent, so a connection that failed before sending, a reset before
@@ -89,19 +92,26 @@ public class EventsQuery {
    */
   private final HttpClient client;
 
+  /** Who the read says it is. Package-private and settable for the hand-built path, see below. */
+  EventStreamBearer bearer;
+
   /**
    * For a consumer that builds this class by hand instead of letting CDI inject it, as several
    * consumer-pact probes across the estate do — {@code new EventsQuery()}, then a package-private
    * field set directly. Kept public and working rather than broken by this change: equivalent to
    * {@code EventsQuery(QitsHttpClients.of(OpenTelemetry.noop(), null))}, no span, no caller
    * header, and the standard retry policy (which never retries a loopback target).
+   *
+   * <p>A hand-built query has <b>no bearer</b> and so reads nothing until {@link #bearer} is set (as
+   * the contracts kit's {@code ContractProbe} does): failing closed is the only default there is.
    */
   public EventsQuery() {
-    this(QitsHttpClients.of(OpenTelemetry.noop(), null));
+    this(QitsHttpClients.of(OpenTelemetry.noop(), null), Unbuilt.BEARER);
   }
 
   @Inject
-  EventsQuery(QitsHttpClients clients) {
+  EventsQuery(QitsHttpClients clients, EventStreamBearer bearer) {
+    this.bearer = bearer;
     this.client =
         clients.wrap(
             HttpClient.newBuilder()
@@ -164,14 +174,20 @@ public class EventsQuery {
 
   private String get(String query) {
     URI target = URI.create(base() + EVENTS_PATH + query);
+    String authorization;
+    try {
+      authorization = bearer.authorization().await().atMost(READ_TIMEOUT);
+    } catch (RuntimeException e) {
+      // Fail closed: no token, no request. The bearer has already logged which client is missing.
+      throw new Unavailable("did not read " + target + ": " + e.getMessage(), e);
+    }
     HttpResponse<String> response;
     try {
       HttpRequest request =
           HttpRequest.newBuilder(target)
               .timeout(READ_TIMEOUT)
               .header("Accept", "application/json")
-              .header("X-Qits-User", "qits-eventstream")
-              .header("X-Qits-Roles", "qits:system")
+              .header("Authorization", authorization)
               .GET()
               .build();
       response = client.send(request, HttpResponse.BodyHandlers.ofString());

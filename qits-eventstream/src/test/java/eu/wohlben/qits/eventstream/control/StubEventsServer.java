@@ -61,6 +61,21 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
   private static final List<Logged> LOG_ROWS = Collections.synchronizedList(new ArrayList<>());
   private static final List<String> QUERIES = Collections.synchronizedList(new ArrayList<>());
 
+  /**
+   * One request's identity headers (qits-1328): what the caller said it was, in arrival order, for
+   * every PUT, list query and stream upgrade. {@code authorization} is null when none was sent.
+   */
+  public record Caller(String kind, String authorization, String user, String roles) {}
+
+  private static final List<Caller> CALLERS = Collections.synchronizedList(new ArrayList<>());
+
+  /** The access token the stub's token endpoint mints. */
+  public static final String TOKEN = "stub-token";
+
+  /** How many times the token endpoint was asked — the bearer's cache is asserted against it. */
+  private static final java.util.concurrent.atomic.AtomicInteger TOKEN_REQUESTS =
+      new java.util.concurrent.atomic.AtomicInteger();
+
   private static volatile int defaultStatus = 201;
   private static Vertx vertx;
   private static HttpServer server;
@@ -74,6 +89,7 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
     SUBSCRIBE_FRAMES.clear();
     LOG_ROWS.clear();
     QUERIES.clear();
+    CALLERS.clear();
     synchronized (SCRIPTED) {
       SCRIPTED.clear();
     }
@@ -90,6 +106,23 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
     synchronized (QUERIES) {
       return List.copyOf(QUERIES);
     }
+  }
+
+  /** Every caller identity that arrived since the last {@link #reset()}, in order. */
+  public static List<Caller> callers() {
+    synchronized (CALLERS) {
+      return List.copyOf(CALLERS);
+    }
+  }
+
+  /** How many token grants the stub's idp half has answered since the JVM started. */
+  public static int tokenRequests() {
+    return TOKEN_REQUESTS.get();
+  }
+
+  private static void record(String kind, MultiMap headers) {
+    CALLERS.add(
+        new Caller(kind, headers.get("Authorization"), headers.get("X-Qits-User"), headers.get("X-Qits-Roles")));
   }
 
   /** Answer every PUT with this status. */
@@ -176,8 +209,21 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
             .requestHandler(
                 request -> {
                   String path = request.path();
+                  if (request.method().name().equals("POST") && path.equals(TOKEN_PATH)) {
+                    // The idp half: a client-credentials grant, answered with a token that lives
+                    // long enough for a whole suite, so a second mint is the cache failing.
+                    TOKEN_REQUESTS.incrementAndGet();
+                    request
+                        .response()
+                        .putHeader("Content-Type", "application/json")
+                        .end(
+                            "{\"access_token\":\"" + TOKEN
+                                + "\",\"token_type\":\"Bearer\",\"expires_in\":3600}");
+                    return;
+                  }
                   if (request.method().name().equals("GET")
                       && path.equals(EventsQuery.EVENTS_PATH)) {
+                    record("query", request.headers());
                     QUERIES.add(request.query() == null ? "" : request.query());
                     request
                         .response()
@@ -188,6 +234,7 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
                   if (request.method().name().equals("PUT")
                       && path.startsWith(EventsPublisher.EVENTS_PATH)) {
                     String id = path.substring(EventsPublisher.EVENTS_PATH.length());
+                    record("put", request.headers());
                     request
                         .body()
                         .onSuccess(
@@ -205,12 +252,15 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
                     socket.reject();
                     return;
                   }
+                  record("stream", socket.headers());
                   SOCKETS.add(socket);
                   socket.textMessageHandler(SUBSCRIBE_FRAMES::offer);
                 });
     server.listen(0, "127.0.0.1").toCompletionStage().toCompletableFuture().join();
     port = server.actualPort();
-    return Map.of("qits.events.url", "http://127.0.0.1:" + port);
+    return Map.of(
+        "qits.events.url", "http://127.0.0.1:" + port,
+        "qits.test.idp.url", "http://127.0.0.1:" + port + IDP_PATH);
   }
 
   @Override
@@ -222,6 +272,11 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
       vertx.close().toCompletionStage().toCompletableFuture().join();
     }
   }
+
+  /** Where the stub's idp half lives, and its token endpoint under it. */
+  static final String IDP_PATH = "/idp";
+
+  static final String TOKEN_PATH = IDP_PATH + "/token";
 
   private static int nextStatus() {
     synchronized (SCRIPTED) {

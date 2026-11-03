@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import eu.wohlben.qits.eventstream.EventStreamBearer;
 import eu.wohlben.qits.eventstream.QitsEventBus;
 import eu.wohlben.qits.eventstream.control.TestEvents.RecordingDurableListener;
 import eu.wohlben.qits.eventstream.control.TestEvents.ThingHappened;
@@ -18,6 +19,7 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.quarkus.test.common.WithTestResource;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
@@ -158,7 +160,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   @Test
   void aCatchupReadRidesOutARefusingEdge() {
     StubEventsServer.seed("r-1", "ThingHappened", T0, "{}");
-    EventsQuery patient = new EventsQuery(retryingClients());
+    EventsQuery patient = new EventsQuery(retryingClients(), FIXED_BEARER);
     patient.eventsUrl = ProxiedEventsServer.url();
 
     edge.refuse();
@@ -180,6 +182,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   @Test
   void aPublishResetBeforeItsResponseIsSentAgain() {
     EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(5));
+    patient.bearer = FIXED_BEARER;
     patient.eventsUrl = ProxiedEventsServer.url();
     patient.publishTimeout = Duration.ofSeconds(5);
     ThingHappened event = new ThingHappened(null, "p-1", 1, T0);
@@ -197,6 +200,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   @Test
   void aPublishRidesOutARefusingEdge() {
     EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(5));
+    patient.bearer = FIXED_BEARER;
     patient.eventsUrl = ProxiedEventsServer.url();
     patient.publishTimeout = Duration.ofSeconds(5);
     ThingHappened event = new ThingHappened(null, "p-2", 1, T0);
@@ -221,6 +225,7 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   @Test
   void anInlinePublishGivesUpWithinItsShortBudgetAndTheOutboxOwnsTheEvent() {
     EventsPublisher patient = new EventsPublisher(loopbackRetrying(), Duration.ofSeconds(1));
+    patient.bearer = FIXED_BEARER;
     patient.eventsUrl = ProxiedEventsServer.url();
     patient.publishTimeout = Duration.ofSeconds(5);
     QuarkusMock.installMockForType(patient, EventsPublisher.class);
@@ -270,6 +275,10 @@ class EdgeSwitchoverTest extends EventstreamTestSupport {
   }
 
   // -- helpers -------------------------------------------------------------------------------------
+
+  /** A hand-built client has no bearer (qits-1328); these cases are about the edge, not the token. */
+  private static final EventStreamBearer FIXED_BEARER =
+      () -> Uni.createFrom().item("Bearer " + StubEventsServer.TOKEN);
 
   private static QitsHttpClients retryingClients() {
     return QitsHttpClients.of(OpenTelemetry.noop(), null, loopbackRetrying());

@@ -69,6 +69,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-websockets-next-deployment</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-oidc-client-deployment</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

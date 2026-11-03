@@ -107,6 +107,18 @@
             <artifactId>quarkus-websockets-next</artifactId>
         </dependency>
         <dependency>
+            <!-- The consuming service's own bearer (qits-1328, epic qits-543 6a): every call to
+                 qits-events carries the token of the service's named client `qits`
+                 (quarkus.oidc-client.qits), read through OidcClients, so this jar has no client
+                 settings of its own. COMPILE scope, not optional: with the X-Qits-User pair gone a
+                 consumer without the extension cannot reach qits-events at all, so the extension
+                 has to arrive with the jar rather than by remembering a line. A consumer that
+                 carries it but configures no `qits` client boots fine (the extension leaves an
+                 unconfigured client out of the map, or disabled) and its calls fail closed. -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-oidc-client</artifactId>
+        </dependency>
+        <dependency>
             <!-- The JAX-RS API and nothing more, for the two causation filters. The API jar is
                  what lets them compile here and stay inert elsewhere: a consumer with quarkus-rest
                  or quarkus-rest-client discovers them through the index, a consumer with neither

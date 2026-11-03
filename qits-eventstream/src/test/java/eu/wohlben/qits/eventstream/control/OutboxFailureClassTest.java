@@ -54,6 +54,8 @@ class OutboxFailureClassTest extends EventstreamTestSupport {
   @Test
   void anAddressNothingAnswersIsUnreachableAndNotARefusal() {
     EventsPublisher publisher = new EventsPublisher();
+    // A bearer, so the request really is made and it is the socket that answers nothing (qits-1328).
+    publisher.bearer = () -> io.smallrye.mutiny.Uni.createFrom().item("Bearer t");
     publisher.eventsUrl = "http://127.0.0.1:1";
     publisher.publishTimeout = Duration.ofSeconds(2);
     ThingHappened event = new ThingHappened("shipped", 1, T0);

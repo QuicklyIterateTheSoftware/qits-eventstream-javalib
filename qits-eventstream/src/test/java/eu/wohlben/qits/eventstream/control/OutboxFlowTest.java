@@ -45,6 +45,34 @@ class OutboxFlowTest extends EventstreamTestSupport {
     assertEquals(0, outboxCount(), "a delivered event must leave no row behind");
   }
 
+  /**
+   * qits-1328: the PUT says who the service is with its own {@code qits} client's token, minted by
+   * the real default {@link QitsClientBearer} from the stub's token endpoint, and with nothing else —
+   * no forwarded user/roles pair beside it. One token serves every publish.
+   */
+  @Test
+  void thePutCarriesTheServicesOwnBearerAndNoForwardedPair() {
+    StubEventsServer.answerWith(201);
+    int mintsBefore = StubEventsServer.tokenRequests();
+
+    bus.publish(new ThingHappened("one", 1, T0));
+    bus.publish(new ThingHappened("two", 2, T0));
+    bus.publish(new ThingHappened("three", 3, T0));
+
+    List<StubEventsServer.Caller> puts =
+        StubEventsServer.callers().stream().filter(caller -> caller.kind().equals("put")).toList();
+    assertEquals(3, puts.size());
+    for (StubEventsServer.Caller put : puts) {
+      assertEquals("Bearer " + StubEventsServer.TOKEN, put.authorization());
+      assertNull(put.user(), "no forwarded user beside the bearer");
+      assertNull(put.roles(), "no forwarded roles beside the bearer");
+    }
+    assertTrue(
+        StubEventsServer.tokenRequests() - mintsBefore <= 1,
+        "the token is reused across publishes, not minted per event");
+    assertEquals(0, outboxCount());
+  }
+
   @Test
   void aReplayIsASuccessAndNotAConflict() {
     // 200 means "already here, identical" — the answer a PUT whose response was lost gets on its
