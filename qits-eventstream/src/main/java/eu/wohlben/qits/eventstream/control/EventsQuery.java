@@ -197,6 +197,9 @@ public class EventsQuery {
     } catch (Exception e) {
       throw new Unavailable("could not read " + target + ": " + e, e);
     }
+    if (CredentialRefusal.isCredentialStatus(response.statusCode())) {
+      CredentialRefusal.report("a read of the event log", target, response.statusCode());
+    }
     if (response.statusCode() != 200) {
       // A 400 here is this client's bug — a malformed cursor, an order the log does not know — and
       // a 5xx is the log's. Neither is an answer about events, so both leave the watermark alone.

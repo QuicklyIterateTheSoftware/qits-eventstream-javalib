@@ -364,7 +364,7 @@ application (250) and the environment (300) override any of it. A library jar's 
 
 | key | default | |
 |---|---|---|
-| `qits.events.url` | `http://qits-events:8080` | scheme + host + port, **no path**. This module appends `/events/api/events/{id}` and `/events/stream` itself, swapping the scheme to `ws(s)` for the second. A path here yields a doubled one and a 404 nothing retries out of. |
+| `qits.events.url` | `https://events.qits.${QITS_DOMAIN}` (`%dev`/`%test`: `http://${QITS_ENVIRONMENT:dev}-qits-events:8080`) | qits-events' public name, through the edge — see "The address rule" below. Scheme + host + port, **no path**. This module appends `/events/api/events/{id}` and `/events/stream` itself, swapping the scheme to `ws(s)` for the second. A path here yields a doubled one and a 404 nothing retries out of. |
 | `qits.eventstream.enabled` | `true` | the master switch. |
 | `qits.eventstream.publish-timeout` | `PT5S` | the inline attempt's deadline, after which the outbox owns the event. |
 | `qits.eventstream.publish-retry-budget` | `PT5S` | how long the **inline** attempt rides out an edge switchover before the outbox owns the event. Capped at qits-http-core's `qits.http.retry.budget` (30s); `PT0S` makes it a single try. The outbox's resend and the catch-up reads keep the full budget. |
@@ -390,9 +390,38 @@ a native image and under `@QuarkusTest`, and anything real overrides it: the app
 or `QITS_EVENTSTREAM_PUBLISHER` in the deployment. A value in this jar's own properties file would
 shadow the default for every consumer at once, which is why there is none.
 
-The default `qits.events.url` is the qits-net alias, which is right for any deployment on that
-network and wrong for a host-run process — a stack that publishes qits-events on a mapped localhost
-port overrides it.
+### The address rule: qits-events' public name, and two exceptions
+
+**`qits.events.url` defaults to `https://events.qits.${QITS_DOMAIN}`** (qits-428, qits-1417): every
+call crosses the edge like every other call on the platform, and nothing dials the internal network.
+The `PUT` and the catch-up reads are HTTP/1.1 over TLS on 443; the stream is the same origin with the
+scheme swapped to `wss://`, and the subscriber always spells the port out (443 for `wss`, 80 for
+`ws`), because Vert.x's websocket client dials a portless address on port 80 whatever the scheme.
+The edge forwards the upgrade through its own stream pool and answers a refused one with
+qits-events' own status.
+
+- **No `QITS_DOMAIN`, no boot — in production.** There is no domain fallback: qits-deployments
+  injects `QITS_DOMAIN` into every container, and a process without it has no public name to dial, so
+  it fails at startup on the unresolvable expression instead of guessing. `%dev` and `%test` keep the
+  previous default, `http://${QITS_ENVIRONMENT:dev}-qits-events:8080`, so a local `quarkus:dev` and
+  every consumer's suite resolve the key without a domain; a suite that actually dials qits-events
+  hands its stub's address in through config, as this one does.
+- **The edge answers a call without an acceptable bearer `401`** before qits-events is involved. With
+  no `quarkus.oidc-client.qits` the library sends nothing and the bearer says so (below); a bearer
+  that is sent and refused — `401` or `403` on the upgrade, a `PUT` or a read — is one WARN a minute
+  from `CredentialRefusal`, naming `quarkus.oidc-client.qits` and the `QITS_RESOURCE_IDP_*` variables
+  it reads, rather than a silent redial. A refused `PUT` is still a *refusal* for the outbox (it
+  spends the attempt budget), so fix the client before the rows give up.
+- **Exception E1: qits-edge pins its internal alias.** Its own `application.properties` sets
+  `qits.events.url=http://${QITS_ENVIRONMENT:dev}-qits-events:8080` (qits-1403): the edge's catch-up
+  is what its admission waits behind, so dialling qits-events through itself would be a boot that
+  waits for itself.
+- **Exception E2: qits-events dials itself at `http://localhost:8080`.** qits-events does not consume
+  this library today; if it ever does, it pins `qits.events.url=http://localhost:8080` in its own
+  `application.properties` — a call to itself, which neither leaves the process nor crosses the edge.
+
+No other consumer overrides the key; a host-run process that reaches qits-events some other way sets
+`QITS_EVENTS_URL`.
 
 **The switch ships ON, and the darkness belongs to the consumer.** A library that shipped dark is a
 library whose first deployment discovers it was never wired up. The `%dev` / `%test` `false` belongs
@@ -426,7 +455,8 @@ disabled client, a mint that failed: the call is not made, and the bearer says w
 missing in one WARN a minute. A publish counts as *unreachable* — the row stays in the outbox and is
 retried at the cap, spending none of the refusal budget; a catch-up read is unavailable and the
 watermark stays; the stream counts a failed dial and redials on its backoff, forever. Configure the
-client and all three recover by themselves.
+client and all three recover by themselves. A token that is sent and refused (`401`/`403`, typically
+the edge) is said the same way, once a minute, by `CredentialRefusal`.
 
 A service whose token comes from elsewhere declares its own `@ApplicationScoped EventStreamBearer`;
 the shipped one is a `@DefaultBean` and yields.

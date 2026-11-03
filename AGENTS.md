@@ -437,7 +437,7 @@ record it.
 
 ## The suite
 
-201 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+206 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a

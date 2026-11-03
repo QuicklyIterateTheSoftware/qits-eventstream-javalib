@@ -77,6 +77,9 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
       new java.util.concurrent.atomic.AtomicInteger();
 
   private static volatile int defaultStatus = 201;
+
+  /** Answer every stream upgrade with this status instead of accepting it; 0 accepts. */
+  private static volatile int streamRejection = 0;
   private static Vertx vertx;
   private static HttpServer server;
   private static int port;
@@ -94,6 +97,20 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
       SCRIPTED.clear();
     }
     defaultStatus = 201;
+    streamRejection = 0;
+  }
+
+  /**
+   * Refuse every stream upgrade with {@code status} — the edge answering a bearer it does not accept
+   * (qits-1417) — until {@link #acceptStreams()} or {@link #reset()}.
+   */
+  public static void rejectStreamsWith(int status) {
+    streamRejection = status;
+  }
+
+  /** Accept stream upgrades again. */
+  public static void acceptStreams() {
+    streamRejection = 0;
   }
 
   /** Put an event in the log this stub serves. Order of seeding does not matter; the route sorts. */
@@ -253,6 +270,11 @@ public class StubEventsServer implements QuarkusTestResourceLifecycleManager {
                     return;
                   }
                   record("stream", socket.headers());
+                  int rejection = streamRejection;
+                  if (rejection != 0) {
+                    socket.reject(rejection);
+                    return;
+                  }
                   SOCKETS.add(socket);
                   socket.textMessageHandler(SUBSCRIBE_FRAMES::offer);
                 });

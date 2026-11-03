@@ -284,6 +284,10 @@ public class EventsPublisher {
                       CanonicalJson.envelope(envelope), StandardCharsets.UTF_8))
               .build();
       HttpResponse<String> response = via.send(request, HttpResponse.BodyHandlers.ofString());
+      if (CredentialRefusal.isCredentialStatus(response.statusCode())) {
+        // Still a refusal for the outbox's bookkeeping; this is only what makes it audible.
+        CredentialRefusal.report("PUT of event " + eventId, target, response.statusCode());
+      }
       return classify(eventId, response);
     } catch (InterruptedException e) {
       // Restore the flag and treat it as "nothing came back": the caller is a worker being asked to

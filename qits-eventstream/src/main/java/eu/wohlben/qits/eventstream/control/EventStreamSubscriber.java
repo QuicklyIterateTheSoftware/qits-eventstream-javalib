@@ -59,7 +59,9 @@ import org.jboss.logging.Logger;
  * redial mints nothing — and with no token there is no dial: the attempt counts as a failed one and
  * the redial backoff takes over, exactly as for a refused connection. The subscriber never gives up
  * on a missing client, so the stream comes up by itself once the client is configured, and the
- * bearer says so at WARN at most once a minute rather than on every attempt.
+ * bearer says so at WARN at most once a minute rather than on every attempt. A bearer that was sent
+ * and refused — the edge answering the upgrade {@code 401}/{@code 403} — is said at WARN the same
+ * way, by {@link CredentialRefusal}, naming the client to fix (qits-1417).
  *
  * <p>Nothing is dialled when the module is disabled, and nothing is dialled when the union is empty
  * — an open stream nobody reads is a connection qits-events maintains for no one. Note what that
@@ -218,7 +220,15 @@ public class EventStreamSubscriber {
         .with(
             opened -> {},
             failure -> {
-              LOG.debugf("event stream dial failed: %s", failure.toString());
+              int status = CredentialRefusal.rejectedUpgradeStatus(failure);
+              if (CredentialRefusal.isCredentialStatus(status)) {
+                // Not a drop: the edge (or qits-events) said no to the bearer, and redialling with
+                // the same one will be told the same thing. Said loudly, then redialled anyway, so
+                // the stream comes up by itself once the client is fixed.
+                CredentialRefusal.report("the event stream upgrade", base + STREAM_PATH, status);
+              } else {
+                LOG.debugf("event stream dial failed: %s", failure.toString());
+              }
               redial();
             });
   }
@@ -322,9 +332,17 @@ public class EventStreamSubscriber {
     if (url.getHost() == null) {
       throw new IllegalStateException("qits.events.url has no host: '" + eventsUrl + "'");
     }
-    String port = url.getPort() == -1 ? "" : ":" + url.getPort();
-    return URI.create(wsScheme + "://" + url.getHost() + port);
+    // The port is always spelled out. Vert.x's websocket client does not derive it from the
+    // scheme: a portless wss:// address is dialled on the client's default port, 80, with TLS —
+    // which is exactly the shape of the public name, https://events.qits.<domain>.
+    int port = url.getPort() != -1 ? url.getPort() : DEFAULT_PORTS.getOrDefault(wsScheme, -1);
+    if (port == -1) {
+      throw new IllegalStateException("qits.events.url has no usable scheme: '" + eventsUrl + "'");
+    }
+    return URI.create(wsScheme + "://" + url.getHost() + ":" + port);
   }
+
+  private static final Map<String, Integer> DEFAULT_PORTS = Map.of("ws", 80, "wss", 443);
 
   private static final Map<String, String> SCHEMES = Map.of("http", "ws", "https", "wss");
 

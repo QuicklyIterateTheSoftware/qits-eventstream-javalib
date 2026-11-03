@@ -215,6 +215,60 @@ class EventStreamSubscriberTest {
     assertEquals(mintsBefore, StubEventsServer.tokenRequests(), "a redial mints nothing");
   }
 
+  /**
+   * qits-1417: the edge refusing the upgrade's bearer is not a dropped stream. It is said at WARN,
+   * naming the client to fix, and the subscriber keeps redialling, so the stream comes back by itself
+   * once the credential is accepted again.
+   */
+  @Test
+  void aRefusedUpgradeIsLoudAndTheStreamComesBackOnceAccepted() throws Exception {
+    StubEventsServer.reset();
+    CredentialRefusal.resetForTest();
+    int before = CredentialRefusal.WARNINGS.get();
+    List<LogRecord> captured = new CopyOnWriteArrayList<>();
+    Handler capture =
+        new Handler() {
+          @Override
+          public void publish(LogRecord record) {
+            captured.add(record);
+          }
+
+          @Override
+          public void flush() {}
+
+          @Override
+          public void close() {}
+        };
+    java.util.logging.Logger refusalLog =
+        java.util.logging.Logger.getLogger(CredentialRefusal.class.getName());
+    refusalLog.addHandler(capture);
+    try {
+      StubEventsServer.rejectStreamsWith(401);
+      StubEventsServer.dropStreams();
+      await(() -> streamCallers().size() >= 3, "the refused upgrade to be redialled");
+      assertTrue(!subscriber.connected(), "a refused upgrade is not a stream");
+      assertEquals(before + 1, CredentialRefusal.WARNINGS.get(), "said once, not once per redial");
+      List<String> warnings =
+          captured.stream()
+              .filter(r -> r.getLevel().intValue() >= Level.WARNING.intValue())
+              .map(EventStreamSubscriberTest::rendered)
+              .toList();
+      assertEquals(1, warnings.size(), "one WARN for the refusal: " + warnings);
+      assertTrue(warnings.get(0).contains("quarkus.oidc-client.qits"), warnings.get(0));
+      assertTrue(warnings.get(0).contains("401"), warnings.get(0));
+      assertTrue(warnings.get(0).contains(EventStreamSubscriber.STREAM_PATH), warnings.get(0));
+
+      StubEventsServer.acceptStreams();
+      String frame = StubEventsServer.awaitSubscribeFrame(PATIENCE);
+      assertEquals(SUBSCRIBE_FRAME, frame, "the stream resubscribes once the bearer is accepted");
+      await(subscriber::connected, "the stream to be back up");
+    } finally {
+      refusalLog.removeHandler(capture);
+      StubEventsServer.acceptStreams();
+      CredentialRefusal.resetForTest();
+    }
+  }
+
   private static List<StubEventsServer.Caller> streamCallers() {
     return StubEventsServer.callers().stream()
         .filter(caller -> caller.kind().equals("stream"))
