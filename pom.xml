@@ -62,7 +62,7 @@
 
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.34.6</quarkus.platform.version>
+        <quarkus.platform.version>3.40.1</quarkus.platform.version>
 
         <!-- Embedded PostgreSQL for the library's suite. The outbox's store IS postgres, so every
              test that boots the persistence unit runs against one — and the first rule here is that
