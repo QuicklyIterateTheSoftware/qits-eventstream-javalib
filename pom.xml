@@ -84,12 +84,12 @@
              class along. Published by libs/qits-integrations-quarkus, which is why the
              <repositories> block below exists. A clone still tests green with that repository
              reachable, or offline once the jar is in ~/.m2. -->
-        <qits.db-core.version>2026.1002.70617</qits.db-core.version>
+        <qits.db-core.version>2026.1106.507</qits.db-core.version>
         <!-- qits-http-core (qits-1198): QitsHttpClients wraps EventsPublisher's and EventsQuery's
              HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
              instead of the receiver seeing a parentless SERVER span. Compile scope in the library,
              so a consuming service's Quarkus module gets CallerServerFilter transitively too. -->
-        <qits.http-core.version>2026.1103.132907</qits.http-core.version>
+        <qits.http-core.version>2026.1106.507</qits.http-core.version>
         <!-- The contracts kit (qits-1149, qits-1163): pact-jvm's consumer half, on the version every
              provider on the estate verifies with, and qits-events' recorded answers
              (golden-masters/index.json + one JSON per state and operation), read by
