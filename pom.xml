@@ -84,7 +84,7 @@
              class along. Published by libs/qits-integrations-quarkus, which is why the
              <repositories> block below exists. A clone still tests green with that repository
              reachable, or offline once the jar is in ~/.m2. -->
-        <qits.db-core.version>2026.1106.507</qits.db-core.version>
+        <qits.db-core.version>2026.1107.191249</qits.db-core.version>
         <!-- qits-http-core (qits-1198): QitsHttpClients wraps EventsPublisher's and EventsQuery's
              HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
              instead of the receiver seeing a parentless SERVER span. Compile scope in the library,
