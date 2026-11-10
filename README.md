@@ -56,7 +56,8 @@ automatically; nobody names them, so they are not in the table.
 public record BuildSuccessful(String repoId, String runId, Instant finishedAt) implements QitsEvent {
   // The interface's four methods are excluded from the payload, so the record's own components are
   // the whole wire body. An event may hold its eventId as an ordinary component; the mix-in hides
-  // the accessor, and identity travels in the envelope.
+  // the accessor, and identity travels in the envelope. A component called `name` or `signature`
+  // would override the interface's and rename the event on the wire, so the build refuses one.
 }
 
 @Inject QitsEventBus bus;
@@ -353,8 +354,9 @@ boolean same = EventSelectionEvaluator.matches(waitFor, frame.name(), payload); 
   and `EventSelection.fromJson` throw `EventSelectionException` with a message fit for the caller.
   Caps: 8 groups, 8 conditions per group, 8 path segments, 256 characters per path, 1024 per value.
 
-A native consumer that binds `EventSelection` from JSON registers `EventSelection`,
-`EventSelection$Condition` and `EventSelection$Op` for reflection, like its other wire types.
+`EventSelection`, `EventSelection$Condition` and `EventSelection$Op` are registered for reflection
+by this library's extension (qits-2055), so a native consumer that binds a selection from JSON
+registers nothing for them.
 
 ## Configuration
 
@@ -565,6 +567,7 @@ evidence and the outbox treats them so:
 | 400 | a UUID was reused | `FAILED` at once, with a WARN |
 | any other status | something answered and said no | retry, and spend one of `max-attempts` |
 | nothing at all | the bus is unreachable | retry **forever**, at the schedule's five-minute cap |
+| no request: the body could not be built here | a packaging or programming error — in a native image, missing reflection | retry **forever** like silence, spending no budget, but WARN on every attempt and hold `eventstream-publish` DOWN |
 
 The last row is why the table has two counters. `attempts` is every try and is what the backoff is
 spaced by; `refusals` counts only the tries that got an answer, and it is the only one the budget
@@ -576,6 +579,25 @@ reaching it is never abandoned.
 An unreachable bus is reported once per sweep rather than once per event: a bus that is down is one
 condition however many events are queued behind it, and rows come due at the backoff, so the notice
 rate-limits itself to five-minutely as an outage lengthens.
+
+**A body this process cannot build is `UNSERIALIZABLE`, and never "unreachable"** (qits-2055). The
+publisher writes the PUT body before it makes the request; if that throws — measured: a native image
+without reflection for `EventEnvelope` — nothing is sent, the publisher WARNs naming the event id,
+its name and the exception, the outbox keeps the row `PENDING` with no refusal spent (so a fixed
+deployment's sweep delivers it) and WARNs per attempt, and the sweeper reports it on its own line —
+"could not be serialised here … not an outage" — rather than counting it as an outage. It used to
+come out as unreachable: retried in silence at DEBUG and announced as qits-events being down while
+it was up.
+
+**`eventstream-publish` is the second `@Readiness` check this jar ships**, found the same way as
+`eventstream-catchup`. DOWN means one of two things: its self-test failed (on its first call it
+writes a probe event and envelope and reads a probe frame and page through the library's own
+serialiser, and remembers the answer — a binary that cannot do this publishes nothing), or some
+event's latest attempt in this process was unserializable. The data names the failure: `selfTest`
+(`passed` or `failed: …`), `unserializable` (a count), `events` (`id (name): detail`) and `reason`.
+UP once that event is attempted again with a body that builds; UP and `applies: no` with the module
+dark. It is in memory, so a restart into a fixed binary comes up ready and the outbox row is what
+still owes the event.
 
 The known hole is named in `OutboxEvent`'s javadoc and deliberately left open: a crash between the
 inline attempt failing and the row committing loses the event.
@@ -611,7 +633,7 @@ which is what qits-events authorizes on; `X-Qits-Caller` beside it is attributio
 user/roles pair travels. The token is read once per call, before the retry loop, so a switchover
 costs no extra mint.
 
-The retry sits *below* the four outcomes: an attempt whose retries ran out is classified exactly
+The retry sits *below* the five outcomes: an attempt whose retries ran out is classified exactly
 as a single attempt would have been, so a switchover longer than the budget is still `UNREACHABLE`
 and the outbox owns it forever, and a read that gave up is still `Unavailable` and leaves the
 watermark where it was.
@@ -688,16 +710,29 @@ instead of inheriting them. The suite starts its own stub qits-events on a Vert.
 the two stores on a **real postgres it spawns itself** — zonky's binaries, resolved as ordinary Maven
 artifacts and started as a child process, never a container — so nothing is skipped for want of
 infrastructure. Four modules: `qits-eventstream/` (the jar and its suite),
-`qits-eventstream-deployment/` (the extension's build half: one build step, no tests of its own),
+`qits-eventstream-deployment/` (the extension's build half: the publisher default, the reflection
+registration and the renaming-event refusal, with a suite that augments throwaway applications),
 `qits-eventstream-consumer-test/` (an unpublished stand-in consumer — the only place the build step
 can be proved, since Quarkus never runs a module's OWN extension descriptor under its own
 `@QuarkusTest`) and `qits-eventstream-contracts/` (the kit above, whose own suite runs every row of a
 sample service against pact-jvm's mock server). Build the reactor, not a single module: the
 extension plugin in `qits-eventstream/` validates against the deployment module.
 
-`.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, but
-**the consumer owns the reflection registration** — read AGENTS.md's section on it before shipping a
-binary, because the failure it describes is silent.
+`.sdkmanrc` names `25.0.2-graalce`. The jar compiles into a consumer's GraalVM native image, and
+**the extension registers the reflection it needs** (qits-2055): `EventEnvelope`, `EventFrame`,
+`EventPage`, `CanonicalJson$QitsEventMixin`, `EventSelection` with `Condition` and `Op`, and every
+`QitsEvent` implementor in the application's Jandex index. A consumer still registers the
+non-`QitsEvent` classes its raw or durable listeners bind with `CanonicalJson.payloadTo`, a payload's
+own nested types, and events from a jar that ships no index — read AGENTS.md's section on it before
+shipping a binary. A miss is no longer silent: the publish is `UNSERIALIZABLE` with a WARN, and
+`eventstream-publish` goes DOWN.
+
+**The build also refuses a `QitsEvent` that would rename itself on the wire.** A record component
+`name` (or any declared `name()`) overrides `QitsEvent.name()`, so the event would be published
+under that field's value instead of its class name — no listener would hear it — and the field
+would vanish from the payload; a record component `signature` does the same. Augmentation fails
+naming the class and the member. Rename the field; an explicit `signature()` method stays the
+supported override.
 
 ## Working on it
 

@@ -54,6 +54,12 @@ public interface QitsEvent {
    * The short label the event log shows. Defaults to {@link #signature()} and there is presently no
    * reason to override it — qits-events keeps {@code name} as the signature and {@code description}
    * as the human account.
+   *
+   * <p><b>Never declare it, and never call a record component {@code name} or {@code signature}</b>
+   * (qits-2055): the accessor overrides this method, so the event would be published under the
+   * field's value instead of its class name, and the mix-in would drop the field from the payload.
+   * The extension's build step refuses both, naming the class. An explicit {@link #signature()}
+   * method stays the supported override.
    */
   default String name() {
     return signature();

@@ -14,6 +14,8 @@ import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import java.util.Map;
 import java.util.UUID;
+import org.eclipse.microprofile.health.HealthCheckResponse;
+import org.eclipse.microprofile.health.Readiness;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -45,6 +47,7 @@ class EventstreamDisabledTest extends EventstreamTestSupport {
   @Inject CatchupSweeper catchup;
   @Inject DurableFunnel funnel;
   @Inject TestEvents.RecordingDurableListener durable;
+  @Inject @Readiness PublishHealthCheck publishHealth;
 
   @Test
   void publishingIsANoOpThatReachesNothingAndRecordsNothing() {
@@ -76,6 +79,19 @@ class EventstreamDisabledTest extends EventstreamTestSupport {
   @Test
   void theSweeperDoesNothing() {
     assertEquals(0, sweeper.sweep());
+  }
+
+  /**
+   * The publish readiness check (qits-2055) has nothing to be about in a process that publishes
+   * nothing: UP, saying it does not apply, and without running its self-test at all.
+   */
+  @Test
+  void thePublishReadinessCheckIsUpAndSaysItDoesNotApply() {
+    HealthCheckResponse response = publishHealth.call();
+
+    assertEquals(HealthCheckResponse.Status.UP, response.getStatus());
+    assertEquals(false, response.getData().orElseThrow().get("enabled"));
+    assertFalse(response.getData().orElseThrow().containsKey("selfTest"));
   }
 
   /**

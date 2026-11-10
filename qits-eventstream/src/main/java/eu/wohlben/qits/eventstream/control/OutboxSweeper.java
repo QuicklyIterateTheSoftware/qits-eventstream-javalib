@@ -32,6 +32,11 @@ import org.jboss.logging.Logger;
  * (see {@link Outbox}), so without a periodic notice the failure it replaced — a give-up WARN per
  * event — would have become no notice at all. One line per sweep rather than one per row: a bus that
  * is down is a single condition however many events are queued behind it.
+ *
+ * <p><b>And a body this process could not build is reported as exactly that, never as an outage</b>
+ * (qits-2055). It used to arrive here as {@code UNREACHABLE} and be announced as "qits-events is
+ * unreachable", sending whoever read it to the network for a fault that was in the binary. It has
+ * its own count and its own line now, and it is not in the unreachable one.
  */
 @ApplicationScoped
 public class OutboxSweeper {
@@ -68,6 +73,8 @@ public class OutboxSweeper {
     List<OutboxEvent> due = outbox.due(now);
     int unreachable = 0;
     String silence = null;
+    int unserializable = 0;
+    String unbuilt = null;
     for (OutboxEvent row : due) {
       // Rebuilt from the stored columns and from nothing else — including parent_id, environment
       // and publisher, all of which the server compares. A parent re-read from the ambient context
@@ -94,6 +101,9 @@ public class OutboxSweeper {
         if (attempt.unreachable()) {
           unreachable++;
           silence = attempt.detail();
+        } else if (attempt.unserializable()) {
+          unserializable++;
+          unbuilt = row.id + " (" + row.name + "): " + attempt.detail();
         }
       }
     }
@@ -107,6 +117,15 @@ public class OutboxSweeper {
           "qits-events is unreachable: %d of %d due event(s) got no answer and will keep being"
               + " retried (%s)",
           unreachable, due.size(), silence);
+    }
+    if (unserializable > 0) {
+      // Its own line, and never folded into the one above: nothing was sent, so nothing about
+      // qits-events was learned. The fix is a build, not a wait.
+      LOG.warnf(
+          "%d of %d due event(s) could not be serialised here and were not sent: this is a"
+              + " packaging/programming error (in a native image, missing reflection), not an"
+              + " outage; they stay owed until a fixed deployment can serialise them (last: %s)",
+          unserializable, due.size(), unbuilt);
     }
     if (!due.isEmpty()) {
       LOG.debugf("outbox sweep attempted %d row(s)", due.size());

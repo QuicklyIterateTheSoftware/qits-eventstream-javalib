@@ -36,10 +36,12 @@ says the same thing about the other way a container gets started.
 `pom.xml` is `qits-eventstream-parent` — versions, repository, plugin setup — and is never published
 (the platform uploads flattened poms). `qits-eventstream/` is the library, coordinates unchanged.
 
-**The library is a Quarkus extension since qits-1770**, for exactly one fact: the envelope's
+**The library is a Quarkus extension since qits-1770**, first for one fact: the envelope's
 `publisher` defaults to the CONSUMING application's `groupId:artifactId`, which only augmentation
-knows. `qits-eventstream-deployment/` holds the one `@BuildStep` (`EventstreamProcessor`) that
-records it as a runtime default; `quarkus-extension-maven-plugin` in `qits-eventstream/` writes the
+knows. `qits-eventstream-deployment/` holds `EventstreamProcessor`, whose build steps record it as a
+runtime default and — since qits-2055 — register the wire types and every `QitsEvent` for
+reflection and refuse an event whose `name`/`signature` member would rename it (below, "What a
+consumer has to do"); `quarkus-extension-maven-plugin` in `qits-eventstream/` writes the
 descriptor naming it, and **refuses to build unless the deployment module depends on the
 `-deployment` artifact of every extension the runtime pulls in** — add one there whenever the
 runtime gains an extension. Published beside the library (release.yml), never named by a consumer.
@@ -48,7 +50,10 @@ runtime gains an extension. Published beside the library (release.yml), never na
 reactor: Quarkus' `ApplicationDependencyResolver` flags extensions among the application's
 DEPENDENCIES, and under `qits-eventstream/`'s suite the application is `qits-eventstream` itself,
 so `qits.eventstream.publisher` is simply absent there and the bus stamps null (hence an
-`Optional`, never a required `String`). The default is proved in `qits-eventstream-consumer-test/`,
+`Optional`, never a required `String`) — and nothing is refused or registered there either. The
+deployment module's own suite (qits-2055) is where the reflection list and the refusal are
+asserted: a direct call against a hand-built index, and `QuarkusUnitTest` augmentations that must
+fail. The default is proved in `qits-eventstream-consumer-test/`,
 an unpublished stand-in consumer whose suite sees `eu.wohlben.qits:qits-eventstream-consumer-test`.
 `qits-eventstream-contracts/` is the test-scope contracts kit (below); release.yml `link:`s it to the
 library, so it is never bundled into the kit and the two publish together. The release stamp
@@ -66,12 +71,13 @@ library carries no literal version.
   `CausationScope`'s package-private `swap`; a consumer never names either.
 - `control/` — `CanonicalJson`, `EventsPublisher`, `EventsQuery`, `Outbox`, `OutboxSweeper`,
   `RetrySchedule`, `EventDispatcher`, `EventStreamSubscriber`, `DurableFunnel`, `CatchupSweeper`,
-  `SweepCensus`, `CatchupHealthCheck`, `EventstreamClock`, and the three wire records
-  `EventEnvelope`, `EventFrame` and `EventPage`.
+  `SweepCensus`, `CatchupHealthCheck`, `PublishHealthCheck`, `UnserializableEvents`,
+  `EventstreamClock`, and the three wire records `EventEnvelope`, `EventFrame` and `EventPage`.
   `EventFrame` is public because a listener receives it; `EventPage` is not, because nobody outside
   the catch-up loop holds one. `SweepCensus` is public because a consumer may want the same facts
-  its own readiness check reads; `CatchupHealthCheck` is public only because a `@Readiness` bean has
-  to be.
+  its own readiness check reads; `CatchupHealthCheck` and `PublishHealthCheck` are public only
+  because a `@Readiness` bean has to be, and `UnserializableEvents` only because it is a bean the
+  publisher's public constructor path injects.
 - `selection/` — `EventSelection`, `EventSelectionEvaluator`, `EventSelectionGrammar`,
   `EventSelectionException`: the payload matcher declared waits use (README, "Selecting events by
   their payload"). Pure Java and Jackson; no bean, no Quarkus annotation, so a CLI can carry it.
@@ -150,8 +156,9 @@ review. Its javadoc argues the widening.
   `publish` promises not to be, and the outbox is already the durable path.
 
   **The retry budget bounds REFUSALS, and nothing bounds an unreachable bus.** `EventsPublisher`
-  answers with four outcomes, not three: delivered, rejected (the 400), refused (a response arrived
-  and said no) and unreachable (no response at all). Only refusals draw on
+  answers with five outcomes, not three: delivered, rejected (the 400), refused (a response arrived
+  and said no), unreachable (no response at all) and unserializable (the body could not be built
+  here, so nothing was sent — below). Only refusals draw on
   `qits.eventstream.max-attempts`; an unreachable attempt is rescheduled indefinitely and settles at
   the schedule's five-minute cap. Hence the two counters on the row — `attempts` spaces the backoff,
   `refusals` spends the budget — and hence the WARN in `OutboxSweeper`, which is the only notice an
@@ -163,6 +170,30 @@ review. Its javadoc argues the widening.
   rule and not a tuning parameter. Do not re-merge the two classes, and do not give `Delivery` a
   `retryable()` again: one predicate over two differently-retried outcomes is exactly the shape in
   which the distinction gets collapsed back.
+
+  **A body that cannot be built is not an outage, and it is the fifth outcome for that reason**
+  (qits-2055). `EventsPublisher` used to write the PUT body inside the same `try` as the HTTP call,
+  whose every throw means "no response" — so a native image without reflection for `EventEnvelope`
+  came out `UNREACHABLE` on every publish: DEBUG on the row, "qits-events is unreachable" from the
+  sweeper (it was up), and every readiness check green. The body is built first now, outside that
+  `try` and before the bearer, and a failure there is `Outcome.UNSERIALIZABLE` /
+  `Delivery.unserializable()`: a WARN from the publisher naming id, name and exception, the row kept
+  `PENDING` and scheduled like silence, **no refusal spent** (a fixed redeploy's sweep must still
+  find it owed), a WARN from `Outbox` per attempt instead of a DEBUG, and its own per-sweep WARN in
+  `OutboxSweeper` that says "not an outage" — never a count in the unreachable line. The body writer
+  is the package-private `EventsPublisher.body` field (`CanonicalJson::envelope`), which is the only
+  way a JVM test can make serialisation throw; leave it a seam, not a configuration point.
+
+  **And the process says so: `eventstream-publish` is a second `@Readiness` check.** DOWN when its
+  self-test fails — on first call it writes a probe event's payload and a probe envelope, and reads
+  a probe frame and page, through `CanonicalJson`, then remembers the answer — and DOWN while any
+  event's latest attempt in this process was `UNSERIALIZABLE` (`UnserializableEvents`, an in-memory
+  map the publisher writes on every attempt, inline and swept: that outcome records, any other
+  clears). UP otherwise, and UP with `applies: no` when the module is dark. Data keys: `enabled`,
+  `selfTest` (`passed` / `failed: …`), `unserializable` (a count), `events` (`id (name): detail`,
+  ten named at most) and `reason` when DOWN. In memory on purpose: a restart into a fixed binary
+  must come up ready, and the outbox row is what still owes the event. A hand-built publisher
+  (`ContractProbe`) gets its own private map, so nothing on that path can be null.
 - **Causation is stamped by the bus, in the envelope, and it never touches an event class.**
   `EventEnvelope` carries a nullable `parentId` and `QitsEventBus.publish` is the only place it is
   resolved. The precedence is the whole rule: **an explicit non-null argument wins; a null or absent
@@ -354,7 +385,7 @@ counts as a use. That is asserted rather than trusted, since a removed listener 
 nothing and says nothing about it: the suite keeps a listener injected nowhere and a raw listener
 whose signature no `eventType()` produces, and requires both in the subscribe frame.
 
-Beyond that there are four facts a consumer gets wrong once each.
+Beyond that there are four facts a consumer gets wrong once each, and two the build now settles for it.
 
 - **No `quarkus.oidc-client.qits`, no calls (qits-1328).** Every call to qits-events carries the
   consuming service's own `qits` client token and nothing else; with no such client the library
@@ -388,29 +419,45 @@ Beyond that there are four facts a consumer gets wrong once each.
   artifact in its real environment.** The triple that replaced it has no default at all, which is
   what makes that class of bug unreachable — there is no fallback with a feature in it to lose, and
   a missing variable dies at Flyway naming itself.
-- **The reflection registration is the consumer's, and it is the one that fails quietly.** A
-  deployable that native-image-compiles must carry a `@RegisterForReflection` naming its own event
-  classes, `EventEnvelope`, `EventFrame` **and** `CanonicalJson$QitsEventMixin` (by string name; it
-  is not public). `EventWireReflection` in qits-ci-service is the worked example.
+- **The reflection registration is the library's now, and the consumer keeps only its remainder**
+  (qits-2055). `EventstreamProcessor` in the deployment module registers, for constructors, methods
+  and fields, `EventEnvelope`, `EventFrame`, `EventPage`, `CanonicalJson$QitsEventMixin`,
+  `EventSelection` with its `Condition` and `Op`, **and every implementor of `QitsEvent` in the
+  combined index** — the application's own classes and every indexed dependency. A deployable no
+  longer hand-lists any of them; `EventWireReflection` in qits-ci-service is now redundant for
+  those entries. What stays the consumer's: classes its raw or durable listeners bind with
+  `CanonicalJson.payloadTo` that are not `QitsEvent`s, a payload's own nested types (a record
+  component of a consumer record type), and events in a jar that ships no Jandex index.
 
-  Without it the binary throws Jackson's `No serializer found for class … you may need to configure
-  reflection` on **every** publish — inside `CanonicalJson` and therefore *before* an envelope
-  existed, so the event never reached the outbox either. Not a delayed delivery, a lost one, with a
-  single WARN to say so.
+  Why it moved, which is also why the list is what it is. Without these registrations the binary
+  throws Jackson's `No serializer found for class … you may need to configure reflection` — for an
+  event class inside `CanonicalJson.payload`, before an envelope exists, so the event is lost with
+  one WARN from the bus; for `EventEnvelope` inside the PUT body, which was the incident above that
+  read as an outage. And `CanonicalJson` builds its own `ObjectMapper` on purpose (not negotiable),
+  so no other build step can see the graph it serialises: the library is the only party that knows
+  its own list. **The mix-in is in it because two binaries were built to find out, and it is the
+  worse failure.** Jackson reads its `@JsonIgnore`s with `getDeclaredMethods()`; with the record
+  types registered and the mix-in left out, a green build published a payload containing
+  `"eventId":"00a32ad6-…"` — no crash, no log, identity in a body that is supposed to carry none.
+  `PublishHealthCheck`'s self-test serialises a `QitsEvent` of its own and checks exactly that, so a
+  binary missing the registration is DOWN on its first readiness poll.
 
-  Nothing registers them automatically because **`CanonicalJson` builds its own `ObjectMapper` on
-  purpose** (above, and not negotiable): the graph that mapper serializes is invisible to the build
-  step that scans for what needs reflecting on. **The mix-in is in the list because two binaries
-  were built to find out, and it is the worse of the two failures.** Jackson reads its `@JsonIgnore`s
-  with `getDeclaredMethods()`; with the record types registered and the mix-in left out, a green
-  build published a payload containing `"eventId":"00a32ad6-…"` — no crash, no log, identity present
-  in a body that is supposed to carry none. A wire contract violation that breaks nothing visible is
-  not a lesser bug than one that throws.
+  A JVM test cannot prove a registration happens — on a JVM everything reflects — so
+  `EventstreamProcessorTest` calls the step against a hand-built Jandex index and asserts the build
+  items, and loads every string-named wire type so a typo cannot register nothing. The correctness
+  proof is still the binary, running.
 
-  The registration lives in the consuming deployable rather than in this jar because the deployable
-  is what gets built into an image and it is the deployable that knows its own event classes. A JVM
-  test can only guard the list's *completeness* — on a JVM these classes reflect whether anyone
-  registered them or not. The correctness proof is the binary, running.
+- **A `QitsEvent` whose members would rename it fails the BUILD** (qits-2055). `QitsEvent.name()`
+  defaults to `signature()`, and `EventEnvelope.of` stamps `name()` as the wire name. A record
+  component `name` — or any `name()` the class declares — overrides it: the event is published
+  under the field's *value* instead of its class name, no listener ever hears it, and the mix-in
+  drops the field from the payload too. A record component `signature` does the same one step
+  earlier. `EventstreamProcessor` therefore raises a `ValidationErrorBuildItem` (ArC's deployment
+  problem: augmentation fails, a `@QuarkusTest` does not boot) per offending class, naming the class,
+  the member and why. An explicit `signature()` **method** stays legal — that is the documented
+  override. `RenamingEventRefusedTest` and `SignatureComponentRefusedTest` (`QuarkusUnitTest`, in the
+  deployment module) prove a real augmentation fails; they never boot an app, so they need no
+  database.
 
 **The far end of that failure was mute, and that is fixed here.** `EventDispatcher` logged a frame
 it could not read at DEBUG, so a binary that could not deserialize `EventFrame` would have consumed
@@ -437,7 +484,7 @@ record it.
 
 ## The suite
 
-206 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+212 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
 against a sweep that really is parked on another thread.
 The database is `eventstream_test` on that instance, named for this repository rather than for a

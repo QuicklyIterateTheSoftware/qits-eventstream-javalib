@@ -11,6 +11,10 @@
          application model there and records it as a runtime default for
          qits.eventstream.publisher.
 
+         Since qits-2055 it also registers the wire types and every QitsEvent implementor for
+         reflection, and fails the build on an event whose `name` or `signature` record component
+         would rename it on the wire.
+
          Nobody depends on this artifact by hand. The runtime jar's
          META-INF/quarkus-extension.properties (written by quarkus-extension-maven-plugin in
          ../qits-eventstream) names it, and Quarkus' bootstrap resolves it for every application
@@ -73,10 +77,29 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-oidc-client-deployment</artifactId>
         </dependency>
+        <dependency>
+            <!-- QuarkusUnitTest (qits-2055): augments a throwaway application holding one event
+                 class, which is how the build-time refusal of a renaming QitsEvent is proved to
+                 fail a REAL build rather than only a direct call of the step. It never boots one:
+                 every case here asserts the augmentation failure, so the suite needs no
+                 database, unlike ../qits-eventstream-consumer-test. -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5-internal</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <!-- Quarkus' log manager, as in the other modules' suites. -->
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <!-- Generates META-INF/quarkus-build-steps.list, without which Quarkus never finds
                      EventstreamProcessor. Named explicitly: from JDK 23 on, javac no longer runs

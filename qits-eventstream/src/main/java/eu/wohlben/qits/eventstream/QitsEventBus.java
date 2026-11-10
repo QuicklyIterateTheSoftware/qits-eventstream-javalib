@@ -145,7 +145,9 @@ public class QitsEventBus {
         return;
       }
       // Everything that is not a delivery becomes a row, including the unretryable 400 — a
-      // rejection that left no trace would be the one failure nobody could investigate.
+      // rejection that left no trace would be the one failure nobody could investigate — and an
+      // envelope the publisher could not serialise (qits-2055): the payload was built, so the row
+      // can hold it, and a fixed deployment's sweep delivers it. The publisher has said so at WARN.
       outbox.enqueue(eventId, envelope, attempt);
     } catch (Exception e) {
       LOG.warnf(e, "event %s (%s) could not be published or recorded", eventId, event.signature());

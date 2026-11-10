@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.function.Function;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -24,7 +25,7 @@ import org.jboss.logging.Logger;
  * the same request" true rather than merely intended. Only the patience differs: the inline
  * attempt rides out a switchover for a few seconds, the outbox's for the standard budget.
  *
- * <p><b>The four answers are four different futures</b>, and collapsing any pair loses something:
+ * <p><b>The five answers are five different futures</b>, and collapsing any pair loses something:
  *
  * <ul>
  *   <li><b>200 / 201</b> — delivered. 201 wrote the row, 200 found it already there with the same
@@ -39,7 +40,23 @@ import org.jboss.logging.Logger;
  *   <li><b>no response at all</b> — unreachable. A connection refused, a name that does not
  *       resolve, a deadline that passed with nothing on the socket. Nothing was learned about the
  *       event, only about the network, so the outbox <b>never gives up</b> on this class.
+ *   <li><b>no request at all, because the body could not be built</b> — unserializable
+ *       (qits-2055). Serialising the envelope threw <em>here</em>, before a byte left the process:
+ *       a programming or packaging error, the measured one being a native image built without
+ *       reflection for {@link EventEnvelope}. Nothing was learned about the event <em>or</em> the
+ *       network, so it spends no budget either, and it is retried at the schedule's cap so the
+ *       fixed redeploy delivers it — but it is a WARN on every attempt and holds the {@code
+ *       eventstream-publish} readiness check DOWN, because no amount of waiting fixes it.
  * </ul>
+ *
+ * <p><b>The fifth used to hide inside the fourth, and it cost an incident's worth of diagnosis.</b>
+ * The body was built inside the same {@code try} as the HTTP call, so a serialiser that threw came
+ * out of the "every throw is no response" catch as {@link Outcome#UNREACHABLE}: logged at DEBUG,
+ * retried forever without a word, announced by {@link OutboxSweeper} as "qits-events is
+ * unreachable" — which it was not — and with every readiness check green. A wrong diagnosis is worse
+ * than none, because it sends the reader to the network. The body is now built before the request
+ * is, outside that {@code try}, and a failure there is {@link Outcome#UNSERIALIZABLE} and nothing
+ * else.
  *
  * <p><b>No bearer counts as unreachable, and nothing is sent (qits-1328).</b> The PUT
  * carries the service's own token from {@link EventStreamBearer} and nothing else says who the
@@ -71,7 +88,7 @@ public class EventsPublisher {
   /** The events API's own path under {@code qits.events.url}, which is a bare scheme+host+port. */
   static final String EVENTS_PATH = "/events/api/events/";
 
-  /** What came of one attempt. See the class javadoc for why there are four and not three. */
+  /** What came of one attempt. See the class javadoc for why there are five and not three. */
   public enum Outcome {
 
     /** 200 or 201. The event is in the log. */
@@ -84,14 +101,24 @@ public class EventsPublisher {
     REFUSED,
 
     /** No response arrived. Retryable, and it spends <b>nothing</b>: the budget is for refusals. */
-    UNREACHABLE
+    UNREACHABLE,
+
+    /**
+     * The body could not be built locally, so no request was made (qits-2055). A programming or
+     * packaging error — the measured one is a native image with no reflection for {@link
+     * EventEnvelope} — and never a condition of the network or of the event's acceptability. Retried
+     * at the schedule's spacing <b>without spending the refusal budget</b>, so the row is still owed
+     * when a fixed redeploy can serialise it; loud on every attempt, and the {@code
+     * eventstream-publish} readiness check is DOWN while any event's latest attempt ended here.
+     */
+    UNSERIALIZABLE
   }
 
   /**
    * An attempt's outcome plus the one line of detail an outbox row records.
    *
-   * <p><b>There is deliberately no {@code retryable()}.</b> Two of these four are retryable and they
-   * are retried differently — one against a budget, one forever — so a single predicate saying
+   * <p><b>There is deliberately no {@code retryable()}.</b> Three of these five are retryable and
+   * they are retried differently — one against a budget, two forever — so a single predicate saying
    * "there will be another attempt" is the exact shape in which the distinction gets collapsed back
    * again by someone reading only the method name. Each outcome has its own question instead.
    */
@@ -114,6 +141,15 @@ public class EventsPublisher {
     /** Nothing answered. Retried indefinitely, at the retry schedule's cap. */
     public boolean unreachable() {
       return outcome == Outcome.UNREACHABLE;
+    }
+
+    /**
+     * Nothing was sent, because the body could not be built here. Retried like {@link
+     * #unreachable()}, but it is <b>not</b> one: the network was never asked, and reporting this as
+     * an outage is the misdiagnosis qits-2055 removed.
+     */
+    public boolean unserializable() {
+      return outcome == Outcome.UNSERIALIZABLE;
     }
   }
 
@@ -154,6 +190,22 @@ public class EventsPublisher {
   EventStreamBearer bearer;
 
   /**
+   * How the PUT body is written: {@link CanonicalJson#envelope}, always, outside a test. A field
+   * rather than a direct call so that a JVM test can make serialisation throw — on a JVM every class
+   * reflects whether anyone registered it or not, so the native-image failure this class has to
+   * classify (qits-2055) cannot be produced any other way short of building a binary.
+   */
+  Function<EventEnvelope, String> body = CanonicalJson::envelope;
+
+  /**
+   * Which events' latest attempt in this process could not be serialised — what the {@code
+   * eventstream-publish} readiness check reads. Injected on the CDI path; a hand-built publisher
+   * (the contracts kit's {@code ContractProbe}) gets a private one nobody reads, so the bookkeeping
+   * below never has a null to step around.
+   */
+  final UnserializableEvents unserializable;
+
+  /**
    * The same raw client for the INLINE attempt, under the same policy with its budget cut to what
    * {@value #INLINE_RETRY_BUDGET} sets, five seconds by default (qits-428). The inline attempt sits on the publishing service's
    * own thread, and the outbox is the durable path: waiting the standard thirty seconds there would
@@ -190,6 +242,7 @@ public class EventsPublisher {
       QitsHttpClients clients,
       Instance<OpenTelemetry> openTelemetry,
       EventStreamBearer bearer,
+      UnserializableEvents unserializable,
       @ConfigProperty(name = INLINE_RETRY_BUDGET, defaultValue = "PT5S") Duration inlineRetryBudget) {
     // RetryPolicy.fromConfig() is the policy the injected bean itself carries, so the inline client
     // differs from the outbox one in its budget and nothing else.
@@ -199,7 +252,8 @@ public class EventsPublisher {
         CallerHeader.value().orElse(null),
         RetryPolicy.fromConfig(),
         inlineRetryBudget,
-        bearer);
+        bearer,
+        unserializable);
   }
 
   /**
@@ -213,7 +267,8 @@ public class EventsPublisher {
         null,
         policy,
         inlineRetryBudget,
-        Unbuilt.BEARER);
+        Unbuilt.BEARER,
+        new UnserializableEvents());
   }
 
   private EventsPublisher(
@@ -222,8 +277,10 @@ public class EventsPublisher {
       String caller,
       RetryPolicy policy,
       Duration inlineRetryBudget,
-      EventStreamBearer bearer) {
+      EventStreamBearer bearer,
+      UnserializableEvents unserializable) {
     this.bearer = bearer;
+    this.unserializable = unserializable;
     HttpClient raw =
         HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
@@ -263,7 +320,40 @@ public class EventsPublisher {
     return inlineRetryBudget;
   }
 
+  /**
+   * One attempt, and the bookkeeping the {@code eventstream-publish} readiness check reads: an
+   * event whose latest attempt could not be serialised is remembered, and any other outcome — a
+   * delivery, a rejection, even a refusal or silence, all of which mean the body <em>was</em> built
+   * — forgets it again. Both callers come through here, the inline publish and the outbox's sweep,
+   * so one place keeps the map true.
+   */
   private Delivery send(HttpClient via, String eventId, EventEnvelope envelope) {
+    Delivery delivery = attempt(via, eventId, envelope);
+    if (delivery.unserializable()) {
+      unserializable.failed(eventId, envelope.name(), delivery.detail());
+    } else {
+      unserializable.cleared(eventId);
+    }
+    return delivery;
+  }
+
+  private Delivery attempt(HttpClient via, String eventId, EventEnvelope envelope) {
+    // The body FIRST, outside the request's try (qits-2055). A serialiser that throws is a local
+    // fault — a native image missing reflection, an envelope Jackson cannot write — and it must not
+    // reach the catch below, whose every throw means "no response". It is built before the bearer
+    // too: a body that cannot exist is the more useful thing to know, and no token is minted for a
+    // request that could never be made.
+    String json;
+    try {
+      json = body.apply(envelope);
+    } catch (RuntimeException | LinkageError e) {
+      LOG.warnf(
+          "event %s (%s) could not be serialised here and was not sent: %s — a packaging or"
+              + " programming error (in a native image, missing reflection), not an outage; the"
+              + " outbox keeps it and a fixed deployment delivers it",
+          eventId, envelope.name(), e.toString());
+      return new Delivery(Outcome.UNSERIALIZABLE, "not serialisable here: " + e);
+    }
     URI target = URI.create(base() + EVENTS_PATH + eventId);
     String authorization;
     try {
@@ -279,9 +369,7 @@ public class EventsPublisher {
               .timeout(publishTimeout)
               .header("Content-Type", "application/json")
               .header("Authorization", authorization)
-              .PUT(
-                  HttpRequest.BodyPublishers.ofString(
-                      CanonicalJson.envelope(envelope), StandardCharsets.UTF_8))
+              .PUT(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
               .build();
       HttpResponse<String> response = via.send(request, HttpResponse.BodyHandlers.ofString());
       if (CredentialRefusal.isCredentialStatus(response.statusCode())) {
@@ -297,7 +385,7 @@ public class EventsPublisher {
     } catch (Exception e) {
       // Every throw out of send() is "no response": a refused connection, an unresolvable name, a
       // deadline that passed. A status code is the only thing that makes an attempt a refusal, and
-      // there is none here.
+      // there is none here. The body was built above, so nothing local can land here any more.
       LOG.debugf("PUT %s failed: %s", target, e.toString());
       return new Delivery(Outcome.UNREACHABLE, e.toString());
     }

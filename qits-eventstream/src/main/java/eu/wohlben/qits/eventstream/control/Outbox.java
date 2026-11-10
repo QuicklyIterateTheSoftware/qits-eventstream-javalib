@@ -30,6 +30,13 @@ import org.jboss.logging.Logger;
  * retried for as long as it is down — at the retry schedule's five-minute cap once the curve is
  * walked out. "The bus is the record" is only true if reaching it is never abandoned, and this is
  * where that sentence is either kept or broken.
+ *
+ * <p><b>Nor by a body this process could not build</b> (qits-2055). An attempt that was {@link
+ * EventsPublisher.Outcome#UNSERIALIZABLE} sent nothing — the fault is in this binary, not in the
+ * event and not in the network — so it is rescheduled the way silence is, spending none of the
+ * budget, and the row is still owed when a fixed redeploy can serialise it. It differs from silence
+ * in one respect, and on purpose: it is a WARN on every attempt rather than a DEBUG, because waiting
+ * is not what fixes it.
  */
 @ApplicationScoped
 public class Outbox {
@@ -114,6 +121,9 @@ public class Outbox {
    * max-attempts} bounds — because a refusal is evidence about this event, while a connection that
    * was never made is evidence about the network and says nothing about whether the event is
    * deliverable.
+   *
+   * <p>An unserialisable attempt is the third case and spends neither more nor less than silence
+   * does — only the log level differs. See the class javadoc.
    */
   private void apply(OutboxEvent row, EventsPublisher.Delivery attempt) {
     row.lastError = truncate(attempt.detail());
@@ -130,6 +140,12 @@ public class Outbox {
     }
     row.status = OutboxStatus.PENDING;
     row.nextAttemptAt = clock.instant().plus(RetrySchedule.outboxBackoff(row.attempts));
+    if (attempt.unserializable()) {
+      LOG.warnf(
+          "event %s (%s) could not be serialised on attempt %d and is kept, next at %s: %s",
+          row.id, row.name, row.attempts, row.nextAttemptAt, row.lastError);
+      return;
+    }
     LOG.debugf(
         "event %s (%s) attempt %d failed, next at %s: %s",
         row.id, row.name, row.attempts, row.nextAttemptAt, row.lastError);
