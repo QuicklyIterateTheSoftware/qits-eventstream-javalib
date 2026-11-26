@@ -120,7 +120,15 @@ class CanonicalJsonTest {
     // decision.
     assertEquals(
         List.of(
-            "description", "environment", "name", "occurredAt", "parentId", "payload", "publisher"),
+            "description",
+            "environment",
+            "name",
+            "occurredAt",
+            "onBehalfOf",
+            "originTraceId",
+            "parentId",
+            "payload",
+            "publisher"),
         fieldNames(parsed));
     assertTrue(parsed.get("description").isNull(), json);
     // @JsonInclude(ALWAYS) is on the TYPE, so each new component inherited the exception to the
@@ -128,6 +136,8 @@ class CanonicalJsonTest {
     assertTrue(parsed.get("parentId").isNull(), json);
     assertTrue(parsed.get("environment").isNull(), json);
     assertTrue(parsed.get("publisher").isNull(), json);
+    assertTrue(parsed.get("originTraceId").isNull(), json);
+    assertTrue(parsed.get("onBehalfOf").isNull(), json);
     assertEquals("ThingHappened", parsed.get("name").asText());
     assertEquals("2026-07-31T12:46:03Z", parsed.get("occurredAt").asText());
     // payload is a STRING holding JSON, not a nested object — the server never parses it.

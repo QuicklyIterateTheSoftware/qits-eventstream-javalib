@@ -165,7 +165,8 @@ public class OutboxSweeper {
       // answer and is usually null; a tier re-read from config would be whatever the process was
       // reconfigured to since, which is a different request than the one being retried. The same
       // goes for a publisher re-read from config after an override was added or an upgrade moved
-      // the default.
+      // the default, and for the chain (qits-2694): the scheduler's thread is in no chain at all,
+      // or in a span of its own that has nothing to do with the publish being retried.
       EventsPublisher.Delivery attempt =
           publisher.put(
               row.id,
@@ -176,7 +177,9 @@ public class OutboxSweeper {
                   row.description,
                   row.parentId,
                   row.environment,
-                  row.publisher));
+                  row.publisher,
+                  row.originTraceId,
+                  row.onBehalfOf));
       if (attempt.delivered()) {
         outbox.delivered(row.id);
       } else {

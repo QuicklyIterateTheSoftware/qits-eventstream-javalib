@@ -124,7 +124,15 @@ class CausationStampingTest extends EventstreamTestSupport {
     assertTrue(root.get("parentId").isNull(), "and it is an explicit null, like description");
     assertEquals(
         List.of(
-            "description", "environment", "name", "occurredAt", "parentId", "payload", "publisher"),
+            "description",
+            "environment",
+            "name",
+            "occurredAt",
+            "onBehalfOf",
+            "originTraceId",
+            "parentId",
+            "payload",
+            "publisher"),
         root.properties().stream().map(Map.Entry::getKey).toList(),
         "alphabetical, so each new key lands where its name puts it with no ordering rule");
 

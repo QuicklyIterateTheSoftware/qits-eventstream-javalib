@@ -38,7 +38,13 @@ import java.time.Instant;
  *
  * <p>The seven-component constructor is kept, delegating with a null publisher, because consuming
  * suites build frames by hand by the hundred — the record's canonical shape grew, and a test that
- * only knew the old one must keep compiling. Jackson binds the canonical (eight-component) one.
+ * only knew the old one must keep compiling. Jackson binds the canonical one.
+ *
+ * <p>{@code originTraceId} and {@code onBehalfOf} are the call chain the event was published in
+ * (qits-2694), appended last under the same rule and null from an older qits-events or a publisher
+ * that stated none. {@link EventDispatcher} and {@link DurableFunnel} run listeners inside that
+ * chain ({@link EventDispatcher#chainOf}), so a call or an event a listener makes inherits it. The
+ * eight-component constructor is kept for hand-built frames, as the seven-component one was.
  */
 @io.quarkus.runtime.annotations.RegisterForReflection
 public record EventFrame(
@@ -49,7 +55,22 @@ public record EventFrame(
     String description,
     String parentId,
     String environment,
-    String publisher) {
+    String publisher,
+    String originTraceId,
+    String onBehalfOf) {
+
+  /** A frame without a chain — the shape before qits-2694, kept for hand-built frames. */
+  public EventFrame(
+      String id,
+      String name,
+      Instant occurredAt,
+      String payload,
+      String description,
+      String parentId,
+      String environment,
+      String publisher) {
+    this(id, name, occurredAt, payload, description, parentId, environment, publisher, null, null);
+  }
 
   /** A frame without a publisher — the shape before qits-1770, kept for hand-built frames. */
   public EventFrame(

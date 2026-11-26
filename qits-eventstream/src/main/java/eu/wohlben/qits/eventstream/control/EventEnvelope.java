@@ -3,6 +3,7 @@ package eu.wohlben.qits.eventstream.control;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import eu.wohlben.qits.eventstream.CausationScope;
 import eu.wohlben.qits.eventstream.QitsEvent;
+import eu.wohlben.qits.http.ChainContext;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -58,6 +59,13 @@ import java.util.UUID;
  * library's deployment module computes at build time from the consuming application's own Maven
  * coordinates. qits-events compares it too (one id dispatched by two services is two claims about
  * history), which is why the outbox stores it and the sweeper resends the stored value.
+ *
+ * <p><b>{@code originTraceId} and {@code onBehalfOf} are the call chain the event was published in</b>
+ * (qits-2694): the trace id of the chain's first call and the subject the chain acts for, both from
+ * qits-http-core's {@link ChainContext}, both nullable. Envelope for the environment's reason — they
+ * are facts about the publishing moment, not about the event — and appended last. qits-events
+ * compares them too, so the outbox stores them and the sweeper resends the stored values rather than
+ * whatever the scheduler's thread holds an hour later.
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record EventEnvelope(
@@ -67,7 +75,24 @@ public record EventEnvelope(
     String description,
     String parentId,
     String environment,
-    String publisher) {
+    String publisher,
+    String originTraceId,
+    String onBehalfOf) {
+
+  /**
+   * An envelope without a chain — the shape before qits-2694, kept for callers that build one by
+   * hand (the contracts kit, consuming suites).
+   */
+  public EventEnvelope(
+      String name,
+      Instant occurredAt,
+      String payload,
+      String description,
+      String parentId,
+      String environment,
+      String publisher) {
+    this(name, occurredAt, payload, description, parentId, environment, publisher, null, null);
+  }
 
   /** The envelope for an event with no cause — the root case, spelled without an argument. */
   public static EventEnvelope of(QitsEvent event) {
@@ -106,6 +131,22 @@ public record EventEnvelope(
    */
   public static EventEnvelope of(
       QitsEvent event, UUID parentEventId, String environment, String publisher) {
+    return of(event, parentEventId, environment, publisher, null);
+  }
+
+  /**
+   * {@link #of(QitsEvent, UUID, String, String)} plus the call chain — the full stamp {@code
+   * QitsEventBus} builds.
+   *
+   * @param chain the resolved chain — {@link ChainContext#outgoing()}, already decided by {@code
+   *     QitsEventBus} — or null for an event published outside any chain
+   */
+  public static EventEnvelope of(
+      QitsEvent event,
+      UUID parentEventId,
+      String environment,
+      String publisher,
+      ChainContext chain) {
     return new EventEnvelope(
         event.name(),
         event.occurredAt(),
@@ -113,6 +154,8 @@ public record EventEnvelope(
         null,
         parentEventId == null ? null : parentEventId.toString(),
         environment,
-        publisher);
+        publisher,
+        chain == null ? null : chain.originTraceId(),
+        chain == null ? null : chain.onBehalfOf());
   }
 }

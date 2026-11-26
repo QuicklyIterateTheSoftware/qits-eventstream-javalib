@@ -3,6 +3,7 @@ package eu.wohlben.qits.eventstream;
 import eu.wohlben.qits.eventstream.control.EventEnvelope;
 import eu.wohlben.qits.eventstream.control.EventsPublisher;
 import eu.wohlben.qits.eventstream.control.Outbox;
+import eu.wohlben.qits.http.ChainContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.Optional;
@@ -60,6 +61,11 @@ import org.jboss.logging.Logger;
  * here rather than imported from qits-integrations-quarkus' {@code EnvironmentHeader}: the
  * extraction rule admits no foreign {@code eu.wohlben.qits.*} import, so the string is the shared
  * contract — grep both repos on a rename.
+ *
+ * <p><b>And so does the call chain</b> (qits-2694): {@link ChainContext#outgoing()} — the request's
+ * or the consumed event's chain inside a scope, a chain starting at the current span outside one —
+ * resolved at the same single point, so an event inherits the origin trace id and the on-behalf-of
+ * subject of whatever caused it, and the outbox row stores both for the sweep.
  *
  * <p><b>And so does the publisher</b> (qits-1770): the service that dispatched the event, {@code
  * qits.eventstream.publisher}. Its default is computed at BUILD time by this library's deployment
@@ -139,7 +145,11 @@ public class QitsEventBus {
       UUID parent = parentEventId != null ? parentEventId : CausationScope.current();
       EventEnvelope envelope =
           EventEnvelope.of(
-              event, parent, environment.orElse("platform"), publisherName.orElse(null));
+              event,
+              parent,
+              environment.orElse("platform"),
+              publisherName.orElse(null),
+              ChainContext.outgoing());
       EventsPublisher.Delivery attempt = publisher.putInline(eventId, envelope);
       if (attempt.delivered()) {
         return;

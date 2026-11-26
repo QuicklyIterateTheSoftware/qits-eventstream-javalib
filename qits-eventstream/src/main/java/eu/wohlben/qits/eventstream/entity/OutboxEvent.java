@@ -92,6 +92,24 @@ public class OutboxEvent extends PanacheEntityBase {
   @Column(length = 255)
   public String publisher;
 
+  /**
+   * The envelope's {@code originTraceId} — the trace id of the first call of the chain the publish
+   * was made in — or null for a publish outside any chain or a row written before the field existed
+   * (qits-2694).
+   *
+   * <p>Stored for {@link #parentId}'s exact reason: the chain is ambient at the moment of the publish
+   * and gone by the time the sweeper runs on its own thread, while qits-events compares it.
+   */
+  @Column(name = "origin_trace_id", length = 32)
+  public String originTraceId;
+
+  /**
+   * The envelope's {@code onBehalfOf} — the subject the chain acts for — or null (qits-2694). Stored
+   * for {@link #originTraceId}'s reason.
+   */
+  @Column(name = "on_behalf_of", length = 255)
+  public String onBehalfOf;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   public OutboxStatus status;

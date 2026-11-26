@@ -3,6 +3,7 @@ package eu.wohlben.qits.eventstream.control;
 import eu.wohlben.qits.eventstream.CausationScope;
 import eu.wohlben.qits.eventstream.QitsDurableEventListener;
 import eu.wohlben.qits.eventstream.persistence.ConsumedEvents;
+import eu.wohlben.qits.http.ChainContext;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -153,7 +154,10 @@ public class DurableFunnel {
                       return false;
                     }
                     CausationScope.with(
-                        EventDispatcher.causeOf(frame), () -> listener.onFrame(frame));
+                        EventDispatcher.causeOf(frame),
+                        () ->
+                            ChainContext.with(
+                                EventDispatcher.chainOf(frame), () -> listener.onFrame(frame)));
                     return true;
                   });
       if (claimed) {

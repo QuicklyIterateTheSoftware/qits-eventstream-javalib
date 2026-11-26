@@ -516,7 +516,8 @@ The `PUT` body, and — plus the row's id — what comes back out of the stream:
 
 ```json
 {"description":null,"environment":"dev","name":"BuildSuccessful",
- "occurredAt":"2026-07-31T12:46:03Z","parentId":"6c3f2b1a-…",
+ "occurredAt":"2026-07-31T12:46:03Z","onBehalfOf":"9b2c6a1e-…",
+ "originTraceId":"4bf92f3577b34da6a3ce929d0e0e4736","parentId":"6c3f2b1a-…",
  "payload":"{\"repoId\":\"…\",\"runId\":\"…\"}","publisher":"eu.wohlben.qits:qits-ci-service"}
 ```
 
@@ -540,9 +541,25 @@ reconfiguration between the attempt and the retry cannot turn the retry into a d
 On the way in, `EventFrame.publisher()` carries it, null from an older qits-events or for an
 event published before the field existed.
 
+`originTraceId` and `onBehalfOf` are the **call chain** the event was published in (qits-2694):
+the trace id of the chain's first call and the bearer subject the chain acts for, from
+qits-http-core's `ChainContext` (`X-Qits-Origin-Trace-Id` / `X-Qits-On-Behalf-Of` on a REST hop;
+see qits-integrations-quarkus-javalib's README). Both nullable. `QitsEventBus` stamps them from
+`ChainContext.outgoing()` at the same single point as the cause — inside a request or a listener
+that is its chain; outside any scope (a scheduler) a chain starting at the current span, with
+nobody on whose behalf — stores them on the outbox row (`origin_trace_id`, `on_behalf_of`, V6) and
+resends the stored values. On the way in, `EventFrame.originTraceId()`/`onBehalfOf()` carry them,
+and the dispatcher and the durable funnel run every listener inside `ChainContext.with(...)` of the
+frame's chain, next to its `CausationScope`: a REST call or an event a listener makes inherits the
+chain of the event it handles. A frame without a well-formed origin is handled outside any chain; a
+malformed on-behalf-of is dropped. The values are honoured as they arrive because only a service can
+state them: qits-events takes them only on the `qits:system` bus publish. A hand-off to your own
+executor leaves the chain behind exactly as it leaves the cause — carry it with
+`ChainContext.with(ChainContext.current(), …)`.
+
 **Canonical means the string is a function of the value and of nothing else.** Keys sorted, no
 insignificant whitespace, absent fields omitted rather than written as explicit nulls. qits-events
-compares `name` + `occurredAt` + `payload` + `parentId` + `environment` + `publisher` byte-for-byte to tell an idempotent replay
+compares `name` + `occurredAt` + `payload` + `parentId` + `environment` + `publisher` + `originTraceId` + `onBehalfOf` byte-for-byte to tell an idempotent replay
 (200) from a reused UUID (400), so two serializations of one event that differ by a space are, to
 the far end, a contradiction. `CanonicalJson` therefore builds its **own** `ObjectMapper` and sets
 every knob explicitly. Read AGENTS.md before touching any of it.

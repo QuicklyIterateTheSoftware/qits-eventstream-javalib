@@ -256,6 +256,14 @@ review. Its javadoc argues the widening.
   job (qits-integrations-quarkus-javalib), which matches these types BY NAME, so renaming `CausedRow`,
   `CausationStamp` or `Uncaused` breaks that suite's contract and every consumer's build with it.
 
+  **The call chain rides the same rails** (qits-2694): `originTraceId` and `onBehalfOf` are envelope
+  fields stamped by the bus from qits-http-core's `ChainContext.outgoing()`, stored on the outbox
+  row (V6) and resent from it, and every dispatch path runs listeners inside
+  `ChainContext.with(EventDispatcher.chainOf(frame), …)` next to the `CausationScope`. qits-events
+  compares both, so the sweep must never re-read the scheduler's ambient chain — `ChainStampingTest`
+  sweeps inside a different chain to prove it. `ChainContext` is qits-http-core's, which the
+  extraction rule already admits (qits-1198).
+
   **No cycle guard and no self-parent repair, here or anywhere on this side.** A guard that catches
   only `A → A` cannot see `A → B → A` and its presence would tell a reader that cycles are handled;
   detection belongs where the graph is visible. qits-events does reject a self-edge, because that

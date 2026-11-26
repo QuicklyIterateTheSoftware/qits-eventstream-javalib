@@ -6,6 +6,7 @@ import eu.wohlben.qits.eventstream.QitsDurableEventListener;
 import eu.wohlben.qits.eventstream.QitsEvent;
 import eu.wohlben.qits.eventstream.QitsEventListener;
 import eu.wohlben.qits.eventstream.QitsRawEventListener;
+import eu.wohlben.qits.http.ChainContext;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Any;
@@ -193,6 +194,10 @@ public class EventDispatcher {
    * with} restores in a {@code finally} — which is what keeps a stale parent off the next frame on a
    * worker thread that is reused for the life of the process.
    *
+   * <p><b>And inside the frame's call chain</b> ({@link #chainOf}, qits-2694), with the same single
+   * scope and the same unwinding: an event or a REST call a listener makes carries the origin trace
+   * id and the on-behalf-of subject of the event it is handling.
+   *
    * <p>Typed listeners are called before raw ones; see the class javadoc for why that is a decision
    * rather than an ordering that happened.
    */
@@ -213,7 +218,9 @@ public class EventDispatcher {
       LOG.debugf("no listener for signature %s", frame.name());
       return;
     }
-    CausationScope.with(causeOf(frame), () -> deliver(frame, listeners, raw, durable));
+    CausationScope.with(
+        causeOf(frame),
+        () -> ChainContext.with(chainOf(frame), () -> deliver(frame, listeners, raw, durable)));
   }
 
   private void deliver(
@@ -330,6 +337,25 @@ public class EventDispatcher {
       LOG.errorf(e, "listener %s could not name its signatures", owner.getClass().getName());
       return Set.of();
     }
+  }
+
+  /**
+   * The call chain a listener of {@code frame} runs in (qits-2694): the frame's own {@code
+   * originTraceId} and {@code onBehalfOf}, so a call or an event the listener makes inherits the
+   * chain of the event that caused it. Null — no scope, so an outgoing call falls back to its span —
+   * when the frame carries no well-formed origin: an event published outside any chain, by an older
+   * library, or before qits-events stored the field. A malformed on-behalf-of is dropped, never
+   * echoed onward, exactly as the inbound HTTP rule drops one.
+   *
+   * <p>The values are honoured as they arrive because only a service can have stated them: the bus
+   * publish at qits-events is {@code qits:system} only, and its manual create takes neither field.
+   */
+  static ChainContext chainOf(EventFrame frame) {
+    String origin = ChainContext.parseOrigin(frame.originTraceId());
+    if (origin == null) {
+      return null;
+    }
+    return new ChainContext(origin, ChainContext.parseOnBehalfOf(frame.onBehalfOf()));
   }
 
   /**

@@ -22,6 +22,8 @@ erDiagram
     string name "not null"
     instant next_attempt_at
     instant occurred_at "not null"
+    string on_behalf_of "length 255"
+    string origin_trace_id "length 32"
     string parent_id "length 36"
     text payload
     string publisher "length 255"

@@ -6,6 +6,7 @@ import eu.wohlben.qits.eventstream.QitsEvent;
 import eu.wohlben.qits.eventstream.QitsEventBus;
 import eu.wohlben.qits.eventstream.QitsEventListener;
 import eu.wohlben.qits.eventstream.QitsRawEventListener;
+import eu.wohlben.qits.http.ChainContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -418,6 +419,7 @@ public final class TestEvents {
     private final AtomicReference<Predicate<EventFrame>> selector = new AtomicReference<>(f -> true);
     private final List<EventFrame> frames = new CopyOnWriteArrayList<>();
     private final List<Optional<UUID>> causes = new CopyOnWriteArrayList<>();
+    private final List<Optional<ChainContext>> chains = new CopyOnWriteArrayList<>();
     private final AtomicReference<String> failOnId = new AtomicReference<>();
     private final AtomicBoolean failWhenAsked = new AtomicBoolean();
     private final AtomicBoolean fromEpoch = new AtomicBoolean();
@@ -450,6 +452,7 @@ public final class TestEvents {
       // Read inside the handler, which is the only place it means anything — and the claim of the
       // interface's javadoc: causation is identical on both channels.
       causes.add(Optional.ofNullable(CausationScope.current()));
+      chains.add(Optional.ofNullable(ChainContext.current()));
       frames.add(frame);
       // Both latches are read into locals before either is used: reset() clears the hold from
       // another thread, and a handler that read them one at a time could find the second one gone.
@@ -574,11 +577,17 @@ public final class TestEvents {
       return List.copyOf(causes);
     }
 
+    /** The ambient call chain seen on each arrival (qits-2694), empty where there was none. */
+    public List<Optional<ChainContext>> chains() {
+      return List.copyOf(chains);
+    }
+
     public void reset() {
       wanted.set(Set.of());
       selector.set(frame -> true);
       frames.clear();
       causes.clear();
+      chains.clear();
       failOnId.set(null);
       failWhenAsked.set(false);
       fromEpoch.set(false);
