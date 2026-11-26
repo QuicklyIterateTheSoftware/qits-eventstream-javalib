@@ -1,12 +1,15 @@
 package eu.wohlben.qits.eventstream.control;
 
 import eu.wohlben.qits.eventstream.entity.OutboxEvent;
+import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -37,6 +40,17 @@ import org.jboss.logging.Logger;
  * (qits-2055). It used to arrive here as {@code UNREACHABLE} and be announced as "qits-events is
  * unreachable", sending whoever read it to the network for a fault that was in the binary. It has
  * its own count and its own line now, and it is not in the unreachable one.
+ *
+ * <p><b>It stops before the store does</b> (qits-2716). Quarkus closes the {@code eventstream}
+ * persistence unit in a shutdown task and stops the scheduler only afterwards, when ArC destroys
+ * the beans — so a tick could still fire, and an offloaded one still finish, against a unit that was
+ * gone, and every such tick ended as the scheduler's own ERROR "Error occurred while executing task
+ * for trigger …OutboxSweeper#tick" around {@code IllegalArgumentException: Unable to find an
+ * EntityManagerFactory for persistence unit 'eventstream'}. The 2026-11-26 qits-agents redeploys
+ * filed it as error issue {@code 80c048a7cde7493bc661f725b8fbe833}. {@link ShutdownGate} has the
+ * whole order; the consequence here is {@link #onStop}: on {@code ShutdownEvent}, while the unit is
+ * still open, no new sweep starts, the one in flight stops at its next row, and the observer waits —
+ * bounded by {@code qits.eventstream.shutdown-drain} — for it to let go.
  */
 @ApplicationScoped
 public class OutboxSweeper {
@@ -49,33 +63,102 @@ public class OutboxSweeper {
 
   @Inject Clock clock;
 
+  @Inject ShutdownGate gate;
+
   @ConfigProperty(name = "qits.eventstream.enabled")
   boolean enabled;
+
+  /**
+   * Held for the whole of a sweep, and the thing {@link #onStop} waits on.
+   *
+   * <p>{@code SKIP} already keeps two <em>ticks</em> apart; this is what lets the shutdown observer
+   * see one, and it keeps a direct {@link #sweep()} call out of a tick's way by the same rule: a
+   * caller that finds a sweep in flight does not queue behind it, it returns having attempted
+   * nothing. Never a blocking {@code lock()} — a sweeper that waits on a holder is the shape the
+   * catch-up's 2026-09-08 incident took ({@link CatchupSweeper}).
+   */
+  private final ReentrantLock sweepLock = new ReentrantLock();
 
   /**
    * The tick. The cadence is a floor on how late a retry can be, not the retry spacing itself —
    * that is {@link RetrySchedule}, held per row in {@code nextAttemptAt}, so a short cadence costs
    * one query and never sends anything early.
+   *
+   * <p><b>While the process runs a throw goes exactly where it always went</b> — out, to the
+   * scheduler's ERROR. Only once {@link ShutdownGate} is closed is it caught, and said at DEBUG: a
+   * sweep cut off by its own process stopping is not a fault anybody can act on, and an ERROR is a
+   * statement that somebody should (qits-2716).
    */
   @Scheduled(
       every = "{qits.eventstream.sweep-interval}",
       concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
   void tick() {
-    sweep();
+    try {
+      sweep();
+    } catch (RuntimeException e) {
+      if (!gate.stopping()) {
+        throw e;
+      }
+      LOG.debugf(e, "the outbox sweep was cut short by shutdown; its rows stay owed");
+    }
   }
 
-  /** Attempt every row that is due now. Returns how many were attempted. */
+  /**
+   * The {@code ShutdownEvent} observer: close the gate, then give a sweep in flight until what is
+   * left of {@code qits.eventstream.shutdown-drain} to reach its next row and stop.
+   *
+   * <p>Here and not in a {@code @PreDestroy}, because of the order {@link ShutdownGate} records:
+   * this is the last moment the {@code eventstream} unit is open, and a {@code @PreDestroy} runs
+   * after it has closed. Past the bound it stops waiting and says what it left behind — the row being
+   * attempted is still owed, and whatever that sweep says on its way down is DEBUG.
+   */
+  void onStop(@Observes ShutdownEvent ignored) {
+    gate.stop();
+    if (!gate.awaitIdle(sweepLock)) {
+      LOG.warnf(
+          "an outbox sweep was still running when the %s shutdown drain ran out; it was abandoned"
+              + " mid-sweep and the rows it had not settled stay owed",
+          gate.drain());
+    }
+  }
+
+  /**
+   * Attempt every row that is due now. Returns how many were attempted.
+   *
+   * <p>Zero, without touching the database, once the process is stopping or while another sweep is
+   * in flight. A sweep that is under way when the stop arrives finishes the row it is on and goes no
+   * further — each row is its own transaction, so there is nothing half-done to leave behind.
+   */
   public int sweep() {
-    if (!enabled) {
+    if (!enabled || gate.stopping() || !sweepLock.tryLock()) {
       return 0;
     }
+    try {
+      // Asked again under the lock: a stop that landed between the check above and the lock must
+      // not be able to slip one more sweep past the observer that is about to wait on it.
+      return gate.stopping() ? 0 : sweepLocked();
+    } finally {
+      sweepLock.unlock();
+    }
+  }
+
+  private int sweepLocked() {
     Instant now = clock.instant();
     List<OutboxEvent> due = outbox.due(now);
+    int attempted = 0;
     int unreachable = 0;
     String silence = null;
     int unserializable = 0;
     String unbuilt = null;
     for (OutboxEvent row : due) {
+      if (gate.stopping()) {
+        LOG.debugf(
+            "the outbox sweep was cut short by shutdown after %d of %d due row(s); the rest stay"
+                + " owed",
+            attempted, due.size());
+        break;
+      }
+      attempted++;
       // Rebuilt from the stored columns and from nothing else — including parent_id, environment
       // and publisher, all of which the server compares. A parent re-read from the ambient context
       // here would be whatever the SCHEDULER's thread happens to hold, which is never the right
@@ -116,7 +199,7 @@ public class OutboxSweeper {
       LOG.warnf(
           "qits-events is unreachable: %d of %d due event(s) got no answer and will keep being"
               + " retried (%s)",
-          unreachable, due.size(), silence);
+          unreachable, attempted, silence);
     }
     if (unserializable > 0) {
       // Its own line, and never folded into the one above: nothing was sent, so nothing about
@@ -125,11 +208,11 @@ public class OutboxSweeper {
           "%d of %d due event(s) could not be serialised here and were not sent: this is a"
               + " packaging/programming error (in a native image, missing reflection), not an"
               + " outage; they stay owed until a fixed deployment can serialise them (last: %s)",
-          unserializable, due.size(), unbuilt);
+          unserializable, attempted, unbuilt);
     }
-    if (!due.isEmpty()) {
-      LOG.debugf("outbox sweep attempted %d row(s)", due.size());
+    if (attempted > 0) {
+      LOG.debugf("outbox sweep attempted %d row(s)", attempted);
     }
-    return due.size();
+    return attempted;
   }
 }

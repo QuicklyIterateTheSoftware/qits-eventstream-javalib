@@ -71,8 +71,8 @@ library carries no literal version.
   `CausationScope`'s package-private `swap`; a consumer never names either.
 - `control/` — `CanonicalJson`, `EventsPublisher`, `EventsQuery`, `Outbox`, `OutboxSweeper`,
   `RetrySchedule`, `EventDispatcher`, `EventStreamSubscriber`, `DurableFunnel`, `CatchupSweeper`,
-  `SweepCensus`, `CatchupHealthCheck`, `PublishHealthCheck`, `UnserializableEvents`,
-  `EventstreamClock`, and the three wire records `EventEnvelope`, `EventFrame` and `EventPage`.
+  `SweepCensus`, `ShutdownGate` (both sweepers' shared stop flag and drain deadline, qits-2716),
+  `CatchupHealthCheck`, `PublishHealthCheck`, `UnserializableEvents`, `EventstreamClock`, and the three wire records `EventEnvelope`, `EventFrame` and `EventPage`.
   `EventFrame` is public because a listener receives it; `EventPage` is not, because nobody outside
   the catch-up loop holds one. `SweepCensus` is public because a consumer may want the same facts
   its own readiness check reads; `CatchupHealthCheck` and `PublishHealthCheck` are public only
@@ -484,9 +484,10 @@ record it.
 
 ## The suite
 
-212 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
-`CatchupStallTest` is the slowest class in the suite because a stall watchdog can only be asserted
-against a sweep that really is parked on another thread.
+220 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+`CatchupStallTest` and `SweepShutdownTest` are the slowest classes in the suite because a stall
+watchdog and a shutdown drain can only be asserted against a sweep that really is parked on another
+thread — the second also waits out a real two-second drain bound (qits-2716).
 The database is `eventstream_test` on that instance, named for this repository rather than for a
 module so a consumer's suite spawning its own postgres on the same host cannot mean the same one.
 `clean-at-start` wipes the schema between Quarkus restarts, which is what keeps a suite sharing one

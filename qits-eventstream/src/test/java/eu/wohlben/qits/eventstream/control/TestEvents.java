@@ -425,6 +425,7 @@ public final class TestEvents {
     private final AtomicReference<CountDownLatch> release = new AtomicReference<>();
     private final AtomicReference<CountDownLatch> reached = new AtomicReference<>();
     private final AtomicReference<Thread> holder = new AtomicReference<>();
+    private final AtomicReference<Runnable> onReplayQuestion = new AtomicReference<>();
 
     @Override
     public String consumerId() {
@@ -477,7 +478,21 @@ public final class TestEvents {
 
     @Override
     public boolean replayFromEpoch() {
+      Runnable hook = onReplayQuestion.get();
+      if (hook != null) {
+        hook.run();
+      }
       return fromEpoch.get();
+    }
+
+    /**
+     * Run this when the sweep asks {@link #replayFromEpoch()} — which it does while initializing a
+     * watermark, inside the per-listener {@code try} of {@code CatchupSweeper.catchUp} and with no
+     * funnel in between. A hook that throws is therefore a throw that reaches the sweeper itself,
+     * exactly where the closed persistence unit's {@code IllegalArgumentException} did (qits-2716).
+     */
+    public void whenAskedAboutReplay(Runnable hook) {
+      onReplayQuestion.set(hook);
     }
 
     /** Want exactly these signatures from now on. */
@@ -567,6 +582,7 @@ public final class TestEvents {
       failOnId.set(null);
       failWhenAsked.set(false);
       fromEpoch.set(false);
+      onReplayQuestion.set(null);
       // Free anything still held before forgetting the latch: a reset that dropped the reference
       // would leave a sweep thread parked for the rest of the suite, which is the very failure this
       // fixture exists to reproduce and the last one a test fixture should cause.

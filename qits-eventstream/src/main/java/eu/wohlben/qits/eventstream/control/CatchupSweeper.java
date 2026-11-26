@@ -5,6 +5,7 @@ import eu.wohlben.qits.eventstream.entity.ConsumerWatermark;
 import eu.wohlben.qits.eventstream.persistence.ConsumedEvents;
 import eu.wohlben.qits.eventstream.persistence.ConsumerWatermarkRepository;
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.annotation.PostConstruct;
@@ -99,6 +100,25 @@ import org.jboss.logging.Logger;
  *
  * <p>{@link #census()} is the whole of what any of that is visible as, and {@link
  * CatchupHealthCheck} is its one reader in this jar.
+ *
+ * <h2>It stops before the store does</h2>
+ *
+ * <p><b>Measured on the 2026-11-26 qits-agents redeploys</b> (qits-2716, error issue {@code
+ * 9e7060829da85e4cbf7a96c68814e162}): every stop logged {@code catch-up failed for …} at ERROR, once
+ * per durable listener per tick, around {@code IllegalArgumentException: Unable to find an
+ * EntityManagerFactory for persistence unit 'eventstream'} out of {@code read()} → {@code
+ * ConsumerWatermarkRepository.findById}. Quarkus 3.40.1 closes the persistence units in a shutdown
+ * task and stops the scheduler only after that, when ArC destroys the beans, so the tick kept firing
+ * into a closed unit — {@link ShutdownGate} has the whole order. Hence {@link #onStop}: on {@code
+ * ShutdownEvent}, the one moment the unit is certainly still open, no sweep starts any more, one in
+ * flight stops at its next listener or page, and the observer waits for it — bounded by {@code
+ * qits.eventstream.shutdown-drain} — so it ends while there is still a store to end against.
+ *
+ * <p><b>Stopping is not the watchdog</b>, and the two are kept apart on purpose. A sweep cut short by
+ * shutdown says so at DEBUG, never ERROR — nothing is wrong and nobody can act — and it does not
+ * count as completed: {@code lastCompletedAt} means "got through every listener", and it did not.
+ * What it leaves is exactly what a watchdog kill leaves, and for the same reason: the watermark only
+ * moves on a whole page, so everything above it is still owed and the next process reads it.
  */
 @ApplicationScoped
 public class CatchupSweeper {
@@ -131,6 +151,8 @@ public class CatchupSweeper {
   @Inject ConsumedEvents consumed;
 
   @Inject Clock clock;
+
+  @Inject ShutdownGate gate;
 
   @ConfigProperty(name = "qits.eventstream.enabled")
   boolean enabled;
@@ -200,15 +222,49 @@ public class CatchupSweeper {
    * without sweeping. That is the inversion the 2026-09-08 incident bought: the tick's job when it
    * cannot sweep is to be the thing that notices, and a tick queued behind a parked thread notices
    * nothing and is never called again.
+   *
+   * <p>Once {@link ShutdownGate} is closed it does nothing at all — the scheduler outlives the store
+   * by a whole shutdown step — and a throw that still reaches it then is DEBUG rather than the
+   * scheduler's ERROR. While the process runs, a throw goes out exactly as it always did.
    */
   @Scheduled(
       every = "{qits.eventstream.catchup-interval}",
       concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
   void tick() {
-    if (!enabled) {
+    if (!enabled || gate.stopping()) {
       return;
     }
-    sweepAll("the scheduled sweep", false);
+    try {
+      sweepAll("the scheduled sweep", false);
+    } catch (RuntimeException e) {
+      if (!gate.stopping()) {
+        throw e;
+      }
+      LOG.debugf(e, "the scheduled catch-up sweep was cut short by shutdown");
+    }
+  }
+
+  /**
+   * The {@code ShutdownEvent} observer: close the gate, then wait — until what is left of {@code
+   * qits.eventstream.shutdown-drain} — for a sweep in flight to reach its next listener or page and
+   * let go of the lock.
+   *
+   * <p>{@code ShutdownEvent} and not {@code @PreDestroy}, because {@code @PreDestroy} runs after
+   * Hibernate has already closed the unit (the order is in {@link ShutdownGate}). It never
+   * interrupts the holder: an interrupt is the watchdog's tool and reads as the watchdog's ERROR, and
+   * the sweep is going to stop by itself at its next check. Past the bound it simply stops waiting
+   * and says which sweep it left behind; whatever that sweep then says on its way down is DEBUG.
+   */
+  void onStop(@Observes ShutdownEvent ignored) {
+    gate.stop();
+    if (!gate.awaitIdle(sweepLock)) {
+      Sweep held = inFlight.get();
+      LOG.warnf(
+          "%s was still running when the %s shutdown drain ran out; it was abandoned, and the events"
+              + " above its watermark stay owed",
+          held == null ? "a catch-up sweep" : held.what(),
+          gate.drain());
+    }
   }
 
   /**
@@ -220,14 +276,20 @@ public class CatchupSweeper {
    * {@code catchUp}) wait one slice and look again. A patient caller therefore cannot be wedged
    * silently either: it re-runs the watchdog every second for as long as it waits.
    *
+   * <p><b>And nobody gets in once the process is stopping</b>, patient or not: the gate is asked on
+   * every pass of the loop and again with the lock in hand, so a caller that was waiting when the
+   * stop arrived gives up instead of starting a sweep the store will not outlive.
+   *
    * @param what what this sweep is, for the log the watchdog may have to write about it
    * @param patient whether to wait for the lock at all
    */
   private boolean claim(String what, boolean patient) {
     while (true) {
+      if (gate.stopping()) {
+        return false;
+      }
       if (sweepLock.tryLock()) {
-        inFlight.set(new Sweep(what, Thread.currentThread(), clock.instant(), null));
-        return true;
+        return admit(what);
       }
       watch();
       if (!patient) {
@@ -235,8 +297,7 @@ public class CatchupSweeper {
       }
       try {
         if (sweepLock.tryLock(WATCH_SLICE_MILLIS, TimeUnit.MILLISECONDS)) {
-          inFlight.set(new Sweep(what, Thread.currentThread(), clock.instant(), null));
-          return true;
+          return admit(what);
         }
       } catch (InterruptedException e) {
         // Somebody interrupted the waiter rather than the holder — a shutdown, or this thread being
@@ -247,6 +308,20 @@ public class CatchupSweeper {
         return false;
       }
     }
+  }
+
+  /**
+   * The lock is ours: record the holder — unless the process started stopping between the gate's
+   * last answer and the lock, in which case give it straight back. Without this second look a stop
+   * landing in that window would let one more sweep start behind the observer's back.
+   */
+  private boolean admit(String what) {
+    if (gate.stopping()) {
+      sweepLock.unlock();
+      return false;
+    }
+    inFlight.set(new Sweep(what, Thread.currentThread(), clock.instant(), null));
+    return true;
   }
 
   /**
@@ -304,8 +379,14 @@ public class CatchupSweeper {
     inFlight.set(null);
     sweepLock.unlock();
     if (Thread.interrupted()) {
-      LOG.warnf(
-          "%s ended interrupted; the interrupt is cleared here rather than carried onward", what);
+      if (gate.stopping()) {
+        // The scheduler's shutdownNow() interrupts what is still running when ArC finally stops
+        // it; that is a shutdown, not a stall, and not worth a WARN.
+        LOG.debugf("%s ended interrupted while the process was stopping", what);
+      } else {
+        LOG.warnf(
+            "%s ended interrupted; the interrupt is cleared here rather than carried onward", what);
+      }
     }
   }
 
@@ -360,7 +441,10 @@ public class CatchupSweeper {
    * least.
    */
   void onStart(@Observes StartupEvent ignored) {
-    if (!enabled || !catchUpAtStartup || dispatcher.durableListeners().isEmpty()) {
+    if (!enabled
+        || !catchUpAtStartup
+        || gate.stopping()
+        || dispatcher.durableListeners().isEmpty()) {
       return;
     }
     Thread.ofVirtual().name("eventstream-catchup-startup").start(this::catchUp);
@@ -377,7 +461,7 @@ public class CatchupSweeper {
    * re-runs the watchdog over the holder once a second for as long as the wait lasts.
    */
   public int catchUp() {
-    if (!enabled) {
+    if (!enabled || gate.stopping()) {
       return 0;
     }
     return sweepAll("a full catch-up", true);
@@ -392,7 +476,9 @@ public class CatchupSweeper {
    * is not consuming" would put a consumer DOWN for as long as one bad event sits in front of one
    * listener, which is exactly the wrong instance to take out of rotation. Only <b>the loop not
    * finishing</b> is that: an interrupt from the watchdog, which means a thread was parked
-   * somewhere it could not come back from on its own.
+   * somewhere it could not come back from on its own — or the process stopping, which cuts the loop
+   * short between listeners and is not completion either, but is said at DEBUG because it is not a
+   * fault.
    */
   private int sweepAll(String what, boolean patient) {
     if (!claim(what, patient)) {
@@ -401,6 +487,12 @@ public class CatchupSweeper {
     try {
       int handled = 0;
       for (QitsDurableEventListener listener : dispatcher.durableListeners()) {
+        if (gate.stopping()) {
+          LOG.debugf(
+              "%s was cut short by shutdown before %s; every event it did not reach is still owed",
+              what, listener.consumerId());
+          break;
+        }
         if (Thread.currentThread().isInterrupted()) {
           LOG.errorf(
               "%s was interrupted by the stall watchdog and is abandoning the remaining listeners;"
@@ -410,7 +502,7 @@ public class CatchupSweeper {
         }
         handled += catchUp(listener).handled();
       }
-      if (!Thread.currentThread().isInterrupted()) {
+      if (!Thread.currentThread().isInterrupted() && !gate.stopping()) {
         lastCompletedAt.set(clock.instant());
       }
       return handled;
@@ -433,7 +525,7 @@ public class CatchupSweeper {
    * the strength of the one listener somebody happened to gate a bootstrap on.
    */
   public CatchupResult catchUp(String consumerId) {
-    if (!enabled) {
+    if (!enabled || gate.stopping()) {
       return incomplete(consumerId);
     }
     if (!claim("a named catch-up for " + consumerId, true)) {
@@ -462,7 +554,7 @@ public class CatchupSweeper {
    * when its handler is an idempotent replacement.
    */
   public CatchupResult rebuildFromEpoch(String consumerId) {
-    if (!enabled) {
+    if (!enabled || gate.stopping()) {
       return incomplete(consumerId);
     }
     String what = "an epoch rebuild of " + consumerId;
@@ -552,6 +644,14 @@ public class CatchupSweeper {
       int handled = 0;
       String cursor = cursorOf(mark);
       while (true) {
+        if (gate.stopping()) {
+          // Between pages is the clean place to stop, for the reason the watchdog's branch below
+          // gives: the watermark moved only on whole pages, so nothing above it was settled.
+          LOG.debugf(
+              "catch-up for %s was cut short by shutdown at %s; the events above it stay owed",
+              consumerId, cursor);
+          return incomplete(consumerId, handled);
+        }
         if (Thread.currentThread().isInterrupted()) {
           // The watchdog struck between pages. Nothing is half-committed by stopping here: the
           // watermark only ever moves on a whole page, which is already the rule, so everything
@@ -575,6 +675,17 @@ public class CatchupSweeper {
         }
         for (EventFrame frame : rows) {
           DurableFunnel.Result result = funnel.offer(listener, frame);
+          if (gate.stopping()) {
+            // Asked first, before the watchdog's and the failure's branches: once the process is
+            // stopping, an interrupt (the scheduler's shutdownNow) or a FAILED (a handler that met
+            // the store closing under it) is the shutdown's doing. The page is unfinished, so the
+            // watermark stays where it is — a row this page already claimed is skipped next time.
+            LOG.debugf(
+                "catch-up for %s was cut short by shutdown on %s; the watermark stays at %s",
+                consumerId, frame.id(), cursor);
+            int counted = result == DurableFunnel.Result.HANDLED ? handled + 1 : handled;
+            return incomplete(consumerId, counted);
+          }
           if (Thread.currentThread().isInterrupted()) {
             // Asked before the FAILED branch below, because when both are true the interrupt is the
             // cause and the FAILED is the symptom — a handler unparked by the watchdog throws, and
@@ -607,12 +718,25 @@ public class CatchupSweeper {
         }
       }
     } catch (EventsQuery.Unavailable unreachable) {
+      if (gate.stopping()) {
+        LOG.debugf(
+            "catch-up for %s was cut short by shutdown: %s", consumerId, unreachable.getMessage());
+        return incomplete(consumerId);
+      }
       // One line per listener per sweep, and the sweep is thirty-secondly: the log being
       // unreachable is a condition rather than an event, and nothing is lost by it — the
       // watermark stayed where it was and the next sweep reads the same rows.
       LOG.warnf("catch-up for %s could not read the log: %s", consumerId, unreachable.getMessage());
       return unavailable(consumerId);
     } catch (RuntimeException e) {
+      if (gate.stopping()) {
+        // qits-2716's own line, demoted. Once the gate is closed a throw here is overwhelmingly the
+        // store going away underneath the sweep — "Unable to find an EntityManagerFactory for
+        // persistence unit 'eventstream'" was the measured one — and the event stays owed exactly
+        // as it does for every other throw. DEBUG, with the exception, for whoever needs to look.
+        LOG.debugf(e, "catch-up for %s was cut short by shutdown; the event stays owed", consumerId);
+        return incomplete(consumerId);
+      }
       if (Thread.currentThread().isInterrupted()) {
         // This is the path the incident's own failure takes once the interrupt has freed it: a
         // SocketException: Closed by interrupt out of the wedged read, wrapped by Agroal and
