@@ -89,7 +89,7 @@
              HttpClient so a publish or a catch-up read opens a CLIENT span and carries X-Qits-Caller,
              instead of the receiver seeing a parentless SERVER span. Compile scope in the library,
              so a consuming service's Quarkus module gets CallerServerFilter transitively too. -->
-        <qits.http-core.version>2026.1126.151431</qits.http-core.version>
+        <qits.http-core.version>2026.1126.172511</qits.http-core.version>
         <!-- The contracts kit (qits-1149, qits-1163): pact-jvm's consumer half, on the version every
              provider on the estate verifies with, and qits-events' recorded answers
              (golden-masters/index.json + one JSON per state and operation), read by
@@ -97,7 +97,7 @@
              the kit at test scope gets both transitively. The recordings come from the same
              platform repository as qits-db-core, so they add no new address. -->
         <pact.version>4.6.21</pact.version>
-        <qits.events-golden-masters.version>2026.1120.65904</qits.events-golden-masters.version>
+        <qits.events-golden-masters.version>2026.1126.183653</qits.events-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
 
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
