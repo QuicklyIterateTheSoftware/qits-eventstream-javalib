@@ -1,6 +1,10 @@
 package eu.wohlben.qits.eventstream.control;
 
+import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+import jakarta.interceptor.Interceptor;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -34,8 +38,30 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * ten seconds by default, which is the whole of docker's default stop grace before its SIGKILL. The
  * first {@link #stop()} fixes the deadline and the second sweeper waits out only what is left of it.
  *
+ * <p><b>A per-instance flag was not enough</b> (qits-2716, second finding). Step (3) above — ArC
+ * destroying this and every other {@code @ApplicationScoped} bean — is not necessarily the end of
+ * the story either. Measured on qits-edge 2026.1126.183436 at 2026-11-27T04:03:35Z: a scheduler tick
+ * fired 2.5 seconds AFTER every {@code ShutdownEvent} observer had already returned, went {@code
+ * OutboxSweeper_ClientProxy.tick()} ({@code OutboxSweeper.java:97}) → {@code sweep()} ({@code :139})
+ * → {@code sweepLocked()} ({@code :147}), and read {@code gate.stopping()} as {@code false}. The
+ * client proxy is what explains it: Quarkus' scheduler keeps calling through the proxy for as long
+ * as the trigger is registered, and ArC answers a call to a destroyed {@code @ApplicationScoped}
+ * bean's proxy by creating a NEW instance — a new {@code OutboxSweeper}, and, because it is
+ * {@code @Inject}ed rather than carried over, a new {@code ShutdownGate} too, with a fresh,
+ * never-stopped {@code stopping}. That fresh gate is what let the tick past its own guard, straight
+ * into a fresh {@code JPAConfig} that has no persistence units to offer — the same {@code
+ * IllegalArgumentException: Unable to find an EntityManagerFactory for persistence unit
+ * 'eventstream'} as before, now arriving even though the gate had, correctly, been closed once.
+ * {@code stopping} and {@code deadline} are therefore {@code static}: whichever instance ArC hands
+ * back to the scheduler, old or freshly re-created, reads the one process-wide flag, and nothing
+ * re-creates a bean's way past it. The flag is reset only by {@link #onStart}, i.e. by a fresh
+ * {@code StartupEvent} — a real process never gets one after it starts stopping, so in production
+ * this is one-directional; what actually fires it a second time is a {@code @QuarkusTest} profile
+ * restarting the application in the same JVM, which is also why {@link #onStart} exists at all.
+ *
  * <p>Package-private and nobody else's: a consumer has no reason to ask, and {@link #resume()} exists
- * only so a test that pressed the button can give the next test a running module back.
+ * so a test that pressed the button can give the next test a running module back — and so {@link
+ * #onStart} has something to call when a process actually does start again.
  */
 @ApplicationScoped
 class ShutdownGate {
@@ -43,17 +69,35 @@ class ShutdownGate {
   @ConfigProperty(name = "qits.eventstream.shutdown-drain", defaultValue = "PT5S")
   Duration drain;
 
-  private volatile boolean stopping;
+  private static volatile boolean stopping;
 
   /** {@link System#nanoTime()} past which nobody waits any more. Meaningful only while stopping. */
-  private volatile long deadline;
+  private static volatile long deadline;
+
+  /** The lock {@link #stop()} and {@link #resume()} share, so every instance sees one decision. */
+  private static final Object LOCK = ShutdownGate.class;
 
   /** Close the gate, and start the drain clock if this is the first call. Idempotent. */
-  synchronized void stop() {
-    if (!stopping) {
-      deadline = System.nanoTime() + drain.toNanos();
-      stopping = true;
+  void stop() {
+    synchronized (LOCK) {
+      if (!stopping) {
+        deadline = System.nanoTime() + drain.toNanos();
+        stopping = true;
+      }
     }
+  }
+
+  /**
+   * Re-open the gate on a fresh {@code StartupEvent}, so an application started again in the same
+   * JVM — a {@code @QuarkusTest} profile restart, chiefly — begins open rather than inheriting the
+   * previous run's stop. {@code PLATFORM_BEFORE} is deliberately early: {@link
+   * CatchupSweeper#onStart} reads {@link #stopping()} as part of deciding whether to fire its own
+   * startup catch-up thread, and that decision must see this reset having already happened rather
+   * than racing it — CDI gives no ordering guarantee between two unrelated beans' observers of the
+   * same event without one.
+   */
+  void onStart(@Observes @Priority(Interceptor.Priority.PLATFORM_BEFORE) StartupEvent ignored) {
+    resume();
   }
 
   /** Whether the process is stopping, which is the whole of what a sweep has to ask between rows. */
@@ -91,9 +135,14 @@ class ShutdownGate {
     return drain;
   }
 
-  /** Open the gate again. Tests only: a real process does not come back from its shutdown. */
-  synchronized void resume() {
-    stopping = false;
-    deadline = 0;
+  /**
+   * Open the gate again. Tests only, chiefly — a real process does not come back from its own
+   * shutdown — plus {@link #onStart}, which is the one caller a restarted-in-place process has.
+   */
+  void resume() {
+    synchronized (LOCK) {
+      stopping = false;
+      deadline = 0;
+    }
   }
 }

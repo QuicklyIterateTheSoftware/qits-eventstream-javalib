@@ -484,7 +484,7 @@ record it.
 
 ## The suite
 
-220 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
+223 tests in `qits-eventstream/`, all surefire, about twenty seconds — the extra few are one embedded postgres starting, and
 `CatchupStallTest` and `SweepShutdownTest` are the slowest classes in the suite because a stall
 watchdog and a shutdown drain can only be asserted against a sweep that really is parked on another
 thread — the second also waits out a real two-second drain bound (qits-2716).

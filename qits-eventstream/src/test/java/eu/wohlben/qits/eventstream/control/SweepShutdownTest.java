@@ -19,6 +19,7 @@ import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
+import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,6 +56,13 @@ import org.junit.jupiter.api.Test;
  * for a sweep already in flight, but <b>only as long as the drain bound</b>; and a sweep that fails
  * <b>while stopping</b> says so at DEBUG while the same failure <b>while running</b> is still the
  * ERROR it always was.
+ *
+ * <p><b>A second finding, qits-edge 2026.1126.183436</b>: a {@code ShutdownEvent} fired through CDI
+ * — the real path, not a direct call on one injected bean — must close the gate too, and the gate
+ * must stay closed even for a {@link ShutdownGate} ArC hands back brand new after destroying the
+ * original. The "gate survives bean re-creation" section below is that: a CDI-fired {@code
+ * ShutdownEvent}, a plain {@code new ShutdownGate()} seeing an existing stop, and a CDI-fired {@code
+ * StartupEvent} reopening it the way a {@code @QuarkusTest} profile restart does.
  *
  * <p>The gate is application state, so every test gives the next one a running module back with
  * {@link ShutdownGate#resume()} — and the class runs under its own profile, so even a test that
@@ -93,6 +101,8 @@ class SweepShutdownTest extends EventstreamTestSupport {
   @Inject ShutdownGate gate;
   @Inject QitsEventBus bus;
   @Inject RecordingDurableListener durable;
+  @Inject BeanManager bm;
+  @Inject EventStreamSubscriber subscriber;
 
   private final Records records = new Records();
   private final List<Thread> threads = new ArrayList<>();
@@ -351,6 +361,61 @@ class SweepShutdownTest extends EventstreamTestSupport {
     assertTrue(
         records.mentioning(Level.SEVERE, "catch-up failed for"),
         "a failure while running is an ERROR: " + records.all());
+  }
+
+  // -- the gate survives bean re-creation (qits-2716, second finding) ------------------------------
+
+  /**
+   * The actual qits-edge 2026.1126.183436 failure: a {@code ShutdownEvent} fired through CDI — the
+   * same path Quarkus takes, not a direct call on one injected bean — must be seen by every
+   * observer, {@link EventStreamSubscriber} included, and must stop a sweep that asks afterwards.
+   * Folded in from the probe that first isolated this ({@code ShutdownObserverProbeTest}).
+   */
+  @Test
+  void aCdiFiredShutdownEventClosesTheGateAndStopsSweeping() {
+    try {
+      bm.getEvent().select(ShutdownEvent.class).fire(new ShutdownEvent());
+      assertTrue(gate.stopping(), "gate not closed by a CDI-fired ShutdownEvent");
+      assertEquals(0, outbox.sweep(), "a stopping gate lets no sweep run");
+    } finally {
+      gate.resume();
+      // The same fire also reached EventStreamSubscriber#onStop, which really did drop the stream;
+      // put it back so whichever test in this class runs next finds one running, as it would have
+      // found it before this test ran.
+      subscriber.start();
+    }
+  }
+
+  /**
+   * The bug itself: ArC answering a call to a destroyed bean's client proxy with a brand-new
+   * instance, whose fields start from scratch. {@code new ShutdownGate()} is exactly that instance —
+   * never touched by CDI, never injected — and {@code stopping}/{@code deadline} being {@code
+   * static} is what makes it see the same decision anyway.
+   */
+  @Test
+  void stopIsProcessWideAndSurvivesANewGateInstance() {
+    gate.stop();
+    assertTrue(
+        new ShutdownGate().stopping(), "a bean re-created by ArC must see the same process-wide stop");
+
+    gate.resume();
+    assertFalse(
+        new ShutdownGate().stopping(), "resume reopens every instance, old and new, alike");
+  }
+
+  /**
+   * The reset path: a {@code StartupEvent} fired through CDI — what a {@code @QuarkusTest} profile
+   * restart sends, and the one thing that ever fires a second one in the same JVM — reopens the
+   * gate exactly as {@link ShutdownGate#resume()} does.
+   */
+  @Test
+  void aCdiFiredStartupEventReopensTheGate() {
+    gate.stop();
+    assertTrue(gate.stopping(), "arranged: the gate starts this test closed");
+
+    bm.getEvent().select(StartupEvent.class).fire(new StartupEvent());
+
+    assertFalse(gate.stopping(), "a CDI-fired StartupEvent did not reopen the gate");
   }
 
   // -- the arrangement -------------------------------------------------------------------------------
